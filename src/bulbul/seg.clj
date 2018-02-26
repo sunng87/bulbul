@@ -9,9 +9,15 @@
 
   (write! [this entry])
 
+  (write! [this entry index])
+
+  (reset-index! [this index])
+
   (flush! [this])
 
-  (read [this]) )
+  (read [this])
+
+  (close! [this]) )
 
 (defn segment-log-initial-state []
   {:index 0})
@@ -25,3 +31,6 @@
   (let [state (atom (segment-log-initial-state))
         config (merge (segment-log-default-config) config)]
     (SegmentLog. state config)))
+
+(defn open-segment-file [file]
+  )
