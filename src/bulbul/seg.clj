@@ -41,18 +41,20 @@
 
 (defn open-segment-file [file]
   (let [raf (RandomAccessFile. file "rw")
-        _ (.readFully raf (byte-array (alength magic-number)))
-        version (.readInt raf)
-        id (.readInt raf)
-        index (.readLong raf)
-        max-size (.readInt raf)
-        max-entry (.readInt raf)]
-    {:fd raf
-     :meta {:version version
-            :max-size max-size
-            :max-entry max-entry}
-     :index index
-     :id id}))
+        magic-number-array (byte-array (alength magic-number))]
+    (.readFully raf magic-number-array)
+    (when (= (seq magic-number) (seq magic-number-array))
+      (let [version (.readInt raf)
+            id (.readInt raf)
+            index (.readLong raf)
+            max-size (.readInt raf)
+            max-entry (.readInt raf)]
+        {:fd raf
+         :meta {:version version
+                :max-size max-size
+                :max-entry max-entry}
+         :index index
+         :id id}))))
 
 (defn- segment-file-name [config id]
   (str (:directory config) "/" (:name config) ".log." id))
