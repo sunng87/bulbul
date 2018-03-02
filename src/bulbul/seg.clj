@@ -74,3 +74,11 @@
             :max-entry (:max-entry config)}
      :index index
      :id id}))
+
+(defn load-seg-directory [dir]
+  (let [dir (io/file dir)]
+    (->> (file-seq dir)
+         (map open-segment-file)
+         doall
+         (filter some?)
+         (sorted-map-by :index))))
