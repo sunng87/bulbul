@@ -3,26 +3,20 @@
             [clojure.java.io :as io])
   (:import [java.io RandomAccessFile]))
 
-(def magic-number (.getBytes "BULBUL_LOG_010" "UTF-8"))
+(def magic-number (.getBytes "BULBULLOG1" "UTF-8"))
 (def version 1)
+(def header-total-size 128)
+(def header-current-size
+  (+ (alength magic-number)
+     2 ;; version
+     2 ;; id
+     4 ;; index
+     2 ;; max-size
+     2 ;; max-entry
+     ))
+(def header-retain-size (- header-total-size header-current-size))
 
 (defrecord SegmentLog [state config])
-
-(extend-protocol p/LogStore
-  SegmentLog
-  (open! [this])
-
-  (write! [this entry])
-
-  (write! [this entry index])
-
-  (reset-index! [this index])
-
-  (flush! [this])
-
-  (read [this])
-
-  (close! [this]) )
 
 (defn segment-log-initial-state []
   {:index 0
@@ -49,6 +43,7 @@
             index (.readLong raf)
             max-size (.readInt raf)
             max-entry (.readInt raf)]
+        (.skipBytes raf header-retain-size)
         {:fd raf
          :meta {:version version
                 :max-size max-size
@@ -67,7 +62,7 @@
     (.writeLong raf index)
     (.writeInt (:max-size config))
     (.writeInt (:max-entry config))
-
+    (.skipBytes raf header-retain-size)
     {:fd raf
      :meta {:version version
             :max-size (:max-size config)
@@ -82,3 +77,30 @@
          doall
          (filter some?)
          (sorted-map-by :index))))
+
+(defn close-seg-files [files]
+  (-> files
+      (map #(.close (:fd %)))
+      (dorun)))
+
+(extend-protocol p/LogStore
+  SegmentLog
+  (open! [this]
+    (let [logs (load-seg-directory (:directory (.-config this)))]
+      (swap! (.-state this) assoc
+             :files logs
+             :open? true)))
+
+  (write! [this entry])
+
+  (write! [this entry index])
+
+  (reset-index! [this index])
+
+  (flush! [this])
+
+  (read [this])
+
+  (close! [this]
+    (close-seg-files (:files @(.-state this)))
+    (swap! (.-state this) assoc :open? false)))
