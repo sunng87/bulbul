@@ -33,6 +33,11 @@
         config (merge (segment-log-default-config) config)]
     (SegmentLog. state config)))
 
+(defn load-last-index [file-fd]
+  (let [current-index -1]
+    ;; TODO: loop over the fd to get latest index
+    ))
+
 (defn open-segment-file [file]
   (let [raf (RandomAccessFile. file "rw")
         magic-number-array (byte-array (alength magic-number))]
@@ -48,7 +53,7 @@
          :meta {:version version
                 :max-size max-size
                 :max-entry max-entry}
-         :index index
+         :start-index index
          :id id}))))
 
 (defn- segment-file-name [config id]
@@ -67,7 +72,8 @@
      :meta {:version version
             :max-size (:max-size config)
             :max-entry (:max-entry config)}
-     :index index
+     :start-index index
+     :last-index index
      :id id}))
 
 (defn load-seg-directory [dir]
@@ -82,6 +88,12 @@
   (-> files
       (map #(.close (:fd %)))
       (dorun)))
+
+(defn store-next-index [store]
+  )
+
+(defn append-entry [store entry-data]
+  )
 
 (extend-protocol p/LogStore
   SegmentLog
