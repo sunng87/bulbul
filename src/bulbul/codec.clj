@@ -12,23 +12,19 @@
 
 (defmacro primitive-codec [sname size writer-fn reader-fn]
   `(defcodec ~sname
-     (encoder [_# data# ^ByteBuf buffer#]
+     (encoder [_# data# ^ByteBuffer buffer#]
               (. buffer# ~writer-fn data#)
               buffer#)
-     (decoder [_# ^ByteBuf buffer#]
-              (when (>= (.readableBytes buffer#) ~size)
+     (decoder [_# ^ByteBuffer buffer#]
+              (when (>= (- (.limit buffer#) (.position buffer#)) ~size)
                 (. buffer# ~reader-fn)))))
 
-(primitive-codec byte 1 writeByte readByte)
-(primitive-codec int16 2 writeShort readShort)
-(primitive-codec uint16 2 writeShort readUnsignedShort)
-(primitive-codec int24 3 writeMedium readMedium)
-(primitive-codec uint24 3 writeMedium readUnsignedMedium)
-(primitive-codec int32 4 writeInt readInt)
-(primitive-codec uint32 4 writeInt readUnsignedInt)
-(primitive-codec int64 8 writeLong readLong)
-(primitive-codec float 4 writeFloat readFloat)
-(primitive-codec double 8 writeDouble readDouble)
+(primitive-codec byte 1 put get)
+(primitive-codec int16 2 putShort getShort)
+(primitive-codec int32 4 putInt getInt)
+(primitive-codec int64 8 putLong getLong)
+(primitive-codec float 4 putFloat getFloat)
+(primitive-codec double 8 putDouble getDouble)
 
 (defn- find-delimiter [^ByteBuf src ^bytes delim]
   (loop [sindex (.readerIndex src) dindex 0]
