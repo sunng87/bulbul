@@ -1,5 +1,5 @@
 (ns bulbul.codec
-  (:import [java.nio ByteBuffer]))
+  (:import [java.nio Buffer ByteBuffer]))
 
 ;; TODO: fix ByteBuffer based api
 (defmacro defcodec [sym encoder-fn decoder-fn]
@@ -15,11 +15,8 @@
 (defmacro decoder [args & body]
   `(fn ~args ~@body))
 
-(defn- available-bytes [^ByteBuffer buf]
-  (.remaining​ buf))
-
 (defn- ensure-buffer [buffer size]
-  (let [space (available-bytes buffer)]
+  (let [space (.remaining buffer)]
     (if (< space size)
       (doto (ByteBuffer/allocate (* 2 (.limit buffer)))
         (.put (.flip buffer)))
@@ -31,7 +28,7 @@
               (doto (ensure-buffer buffer# ~size)
                 (. ~writer-fn data#)))
      (decoder [_# ^ByteBuffer buffer#]
-              (when (>= (available-bytes buffer#) ~size)
+              (when (>= (.remaining buffer#) ~size)
                 (. buffer# ~reader-fn)))))
 
 (primitive-codec byte 1 put get)
@@ -83,7 +80,7 @@
                (nil? delimiter)
                (do
                  (when-let [byte-length ((:decoder prefix) buffer)]
-                   (when-not (> byte-length (available-bytes buffer))
+                   (when-not (> byte-length (.remaining buffer))
                      (let [bytes (byte-array byte-length)]
                        (.get buffer ^bytes bytes)
                        (String. bytes encoding)))))
@@ -117,7 +114,7 @@
                  decode-length-fn (or decode-length-fn identity)
                  byte-length (decode-length-fn ((:decoder prefix) buffer))]
              (when-not (or (nil? byte-length)
-                           (> byte-length (available-bytes buffer)))
+                           (> byte-length (.remaining buffer)))
                (let [result-bytes (byte-array byte-length)]
                  (.get buffer result-bytes))))))
 
@@ -143,9 +140,9 @@
                  head (first data)
                  body (second data)
                  body-codec (get children head)]
-             ((:encoder enumer) head buffer)
-             ((:encoder body-codec) body buffer)
-             buffer))
+             (doto buffer
+               ((:encoder enumer) head buffer)
+               ((:encoder body-codec) body buffer))))
   (decoder [options ^ByteBuffer buffer]
            (let [[enumer children] options
                  head ((:decoder enumer) buffer)
@@ -154,11 +151,14 @@
              (when-not (nil? body)
                [head body]))))
 
-(defcodec frame
+(defcodec record
   (encoder [options data ^ByteBuffer buffer]
            (let [codecs options]
-             (dorun (map #((:encoder %1) %2 buffer) codecs data))
-             buffer))
+             (loop [$buf buffer $codecs codecs $data data]
+               (if (not-empty $codecs)
+                 (recur ((:encoder (first $codecs)) (first $data) $buf)
+                        (rest $codecs) (rest $data))
+                 $buf))))
   (decoder [options ^ByteBuffer buffer]
            (let [codecs options]
              (loop [c codecs r []]
@@ -171,10 +171,10 @@
   (encoder [options data ^ByteBuffer buffer]
            (let [length (count data)
                  {length-codec :prefix body-codec :body} options]
-             ((:encoder length-codec) length buffer)
-             (doseq [frm data]
-               ((:encoder body-codec) frm buffer))
-             buffer))
+             (loop [$buf ((:encoder length-codec) length buffer) $data data]
+               (if (not-empty $data)
+                 (recur ((:encoder body-codec) (first $data) $buf) (rest $data))
+                 $buf))))
   (decoder [options ^ByteBuffer buffer]
            (let [{length-codec :prefix body-codec :body} options
                  length ((:decoder length-codec) buffer)]
