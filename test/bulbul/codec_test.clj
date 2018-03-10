@@ -8,7 +8,7 @@
   (are [data codec]
       (is (= data (sut/decode codec (.rewind (sut/encode codec data)))))
 
-    1 (sut/byte)
+    (clojure.core/byte 1) (sut/byte)
     1 (sut/int16)
     100 (sut/int32)
     (long 1000) (sut/int64)
@@ -36,9 +36,9 @@
 (deftest test-nil-results
   (let [codec (sut/string :prefix (sut/int32) :encoding :utf-8)
         buffer (ByteBuffer/allocate 60)]
-    (.putInteger buffer 50)
+    (.putInt buffer 50)
     (.put buffer (.getBytes "Hello World" "UTF-8"))
-    (.rewind buffer)
+    (.flip buffer)
 
     (is (nil? (sut/decode codec buffer)))))
 

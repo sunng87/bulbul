@@ -1,5 +1,5 @@
 (ns bulbul.codec
-  (:import [java.nio Buffer ByteBuffer]))
+  (:import [java.nio ByteBuffer]))
 
 ;; TODO: fix ByteBuffer based api
 (defmacro defcodec [sym encoder-fn decoder-fn]
@@ -18,7 +18,8 @@
 (defn- ensure-buffer [buffer size]
   (let [space (.remaining buffer)]
     (if (< space size)
-      (doto (ByteBuffer/allocate (* 2 (.limit buffer)))
+      (doto (ByteBuffer/allocate (max (+ size (.position buffer))
+                                      (* 2 (.capacity buffer))))
         (.put (.flip buffer)))
       buffer)))
 
@@ -31,7 +32,15 @@
               (when (>= (.remaining buffer#) ~size)
                 (. buffer# ~reader-fn)))))
 
-(primitive-codec byte 1 put get)
+#_(primitive-codec byte 1 put get)
+(defcodec byte
+  (encoder [this data ^ByteBuffer buffer]
+           (doto (ensure-buffer buffer 1)
+             (. put (clojure.core/byte data))))
+  (decoder [this ^ByteBuffer buffer]
+           (when (>= (.remaining buffer) 1)
+             (. buffer get))))
+
 (primitive-codec int16 2 putShort getShort)
 (primitive-codec int32 4 putInt getInt)
 (primitive-codec int64 8 putLong getLong)
@@ -105,7 +114,7 @@
                  byte-length (if (nil? data) 0 (alength data))
                  encoded-length (encode-length-fn byte-length)]
              (as-> buffer $buf
-               ((:encoder prefix) encoded-length buffer)
+               ((:encoder prefix) encoded-length $buf)
                (if (some? data)
                  (.put (ensure-buffer $buf byte-length) data)
                  $buf))))
@@ -116,7 +125,8 @@
              (when-not (or (nil? byte-length)
                            (> byte-length (.remaining buffer)))
                (let [result-bytes (byte-array byte-length)]
-                 (.get buffer result-bytes))))))
+                 (.get buffer result-bytes)
+                 result-bytes)))))
 
 (def ^{:private true} reversed-map
   (memoize
@@ -140,9 +150,9 @@
                  head (first data)
                  body (second data)
                  body-codec (get children head)]
-             (doto buffer
-               ((:encoder enumer) head buffer)
-               ((:encoder body-codec) body buffer))))
+             (as-> buffer $buf
+               ((:encoder enumer) head $buf)
+               ((:encoder body-codec) body $buf))))
   (decoder [options ^ByteBuffer buffer]
            (let [[enumer children] options
                  head ((:decoder enumer) buffer)
