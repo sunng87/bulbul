@@ -1,5 +1,6 @@
 (ns bulbul.codec
-  (:import [java.nio ByteBuffer]))
+  (:import [java.nio ByteBuffer]
+           [java.util.zip CRC32]))
 
 ;; TODO: fix ByteBuffer based api
 (defmacro defcodec [sym encoder-fn decoder-fn]
@@ -209,3 +210,33 @@
 
 (defn decode [codec ^ByteBuffer buffer]
   ((:decoder codec) buffer))
+
+(defn crc32 [byte-buffer]
+  (let [v (doto (CRC32.) (.update byte-buffer) (.getValue))]
+    (.flip byte-buffer)
+    v))
+
+(defn wrap-crc32-block! [fc codec data]
+  (let [byte-buffer (encode codec data)
+        block-length (.. byte-buffer flip remaining)
+        crc-value (crc32 byte-buffer)
+        buffer (ByteBuffer/allocate (+ block-length 4 8))]
+    (.putInt buffer block-length)
+    (.putLong buffer crc-value)
+    (.put buffer (.flip byte-buffer))
+
+    (.flip buffer)
+
+    (.write fc buffer)))
+
+(defn unwrap-crc32-block [fc codec]
+  (let [block-meta-buffer (ByteBuffer/allocate 12)
+        len (.read fc block-meta-buffer)]
+    (when (= len 12)
+      (.flip block-meta-buffer)
+      (let [byte-length (.readInt block-meta-buffer)
+            crc-value (.readLong block-meta-buffer)
+            content-buffer (ByteBuffer/allocate byte-length)]
+        (when (= (.read fc content-buffer) byte-length)
+          (when (= crc-value (crc32 (.flip content-buffer)))
+            (decode codec content-buffer)))))))
