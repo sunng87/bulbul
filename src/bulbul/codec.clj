@@ -1,5 +1,6 @@
 (ns bulbul.codec
   (:import [java.nio ByteBuffer]
+           [java.nio.channels FileChannel]
            [java.util.zip CRC32]))
 
 ;; TODO: fix ByteBuffer based api
@@ -216,7 +217,7 @@
     (.flip byte-buffer)
     v))
 
-(defn wrap-crc32-block! [fc codec data]
+(defn wrap-crc32-block! [^FileChannel fc codec data]
   (let [byte-buffer (encode codec data)
         block-length (.. byte-buffer flip remaining)
         crc-value (crc32 byte-buffer)
@@ -229,14 +230,23 @@
 
     (.write fc buffer)))
 
-(defn unwrap-crc32-block [fc codec]
-  (let [block-meta-buffer (ByteBuffer/allocate 12)
-        len (.read fc block-meta-buffer)]
-    (when (= len 12)
-      (.flip block-meta-buffer)
-      (let [byte-length (.readInt block-meta-buffer)
-            crc-value (.readLong block-meta-buffer)
-            content-buffer (ByteBuffer/allocate byte-length)]
-        (when (= (.read fc content-buffer) byte-length)
-          (when (= crc-value (crc32 (.flip content-buffer)))
-            (decode codec content-buffer)))))))
+(defn unwrap-crc32-block [^FileChannel fc codec decode?]
+  (let [cur-pos (.position fc)
+        block-meta-buffer (ByteBuffer/allocate 12)
+        len (.read fc block-meta-buffer)
+        result (when (= len 12)
+                 (.flip block-meta-buffer)
+                 (let [byte-length (.readInt block-meta-buffer)
+                       crc-value (.readLong block-meta-buffer)
+                       content-buffer (ByteBuffer/allocate byte-length)]
+                   (when (= (.read fc content-buffer) byte-length)
+                     (when (= crc-value (crc32 (.flip content-buffer)))
+                       (if decode?
+                         (decode codec (.flip content-buffer))
+                         true)))))]
+    (if (some? result)
+      result
+      (do
+        ;; reset position to last read
+        (.position fc cur-pos)
+        nil))))

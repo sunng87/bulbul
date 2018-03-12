@@ -1,5 +1,6 @@
 (ns bulbul.seg
   (:require [bulbul.protocol :as p]
+            [bulbul.codec :as bc]
             [clojure.java.io :as io])
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer]))
@@ -34,10 +35,18 @@
         config (merge (segment-log-default-config) config)]
     (SegmentLog. state config)))
 
-(defn load-last-index [file-fd]
-  (let [current-index -1]
-    ;; TODO: loop over the fd to get latest index
-    ))
+(defn- load-last-index [fd codec]
+  (let [current-index (:last-index fd)
+        file-channel (:fd fd)
+        file-size (.size file-channel)]
+    (loop [idx current-index]
+      (if (< (.position file-channel) (dec file-size))
+        (if-let [item (bc/unwrap-crc32-block file-channel codec false)]
+          (recur (inc idx))
+          (do
+            ;; TODO: file conruppted, do something
+            idx))
+        idx))))
 
 (defn open-segment-file [file]
   (let [raf (.getChannel (RandomAccessFile. file "rw"))
@@ -114,7 +123,7 @@
 
   (write! [this entry])
 
-  (write! [this entry index])
+  #_(write! [this entry index])
 
   (reset-index! [this index])
 
