@@ -44,9 +44,8 @@
         (if-let [item (bc/unwrap-crc32-block file-channel codec false)]
           (recur (inc idx))
           (do
-            ;; TODO: file conruppted, do something
-            idx))
-        idx))))
+            [false idx]))
+        [true idx]))))
 
 (defn open-segment-file [file]
   (let [raf (.getChannel (RandomAccessFile. file "rw"))
@@ -64,18 +63,33 @@
             {:fd raf
              :meta {:version version
                     :max-size max-size
-                    :max-entry max-entry}
+                    :max-entry max-entry
+                    :file file}
              :start-index index
              :id id})
           ;; not a bulbul file
           (.close raf)))
       (.close raf))))
 
-(defn- segment-file-name [config id]
-  (str (:directory config) "/" (:name config) ".log." id))
+(defn- load-segment-files [codec index-file-map]
+  (loop [segs index-file-map result [] previous-last-index -1]
+    (if-let [current-seg (first segs)]
+      (if (= previous-last-index (dec (:start-index current-seg)))
+        (let [[integrity last-index] (load-last-index (:fd current-seg) codec)]
+          (if integrity
+            (recur (rest index-file-map)
+                   (conj result (assoc current-seg :last-index last-index))
+                   last-index)))
+        ;; TODO: delete skipped files
+        result)
+      result)))
+
+(defn- segment-file [config id]
+  (io/file (str (:directory config) "/" (:name config) ".log." id)))
 
 (defn create-segment-file [id index config]
-  (let [raf (.getChannel (RandomAccessFile. (segment-file-name config id) "rw"))
+  (let [file (segment-file config id)
+        raf (.getChannel (RandomAccessFile. file "rw"))
         hb (ByteBuffer/allocate header-total-size)]
     (.put hb magic-number)
     (.putInt hb (:version config))
@@ -89,25 +103,28 @@
     {:fd raf
      :meta {:version version
             :max-size (:max-size config)
-            :max-entry (:max-entry config)}
+            :max-entry (:max-entry config)
+            :file file}
      :start-index index
      :last-index index
      :id id}))
 
-(defn load-seg-directory [dir]
-  (let [dir (io/file dir)]
+(defn load-seg-directory [dir codec]
+  (let [dir (doto (io/file dir)
+              (.mkdirs))]
     (->> (file-seq dir)
          (map open-segment-file)
          doall
          (filter some?)
-         (sorted-map-by :index))))
+         (sort-by :index)
+         (load-segment-files codec))))
 
 (defn close-seg-files [files]
   (-> files
       (map #(.close (:fd %)))
       (dorun)))
 
-(defn store-next-index [store]
+(defn get-next-index [store]
   )
 
 (defn append-entry [store entry-data]

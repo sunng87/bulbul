@@ -1,4 +1,5 @@
 (ns bulbul.codec
+  (:refer-clojure :exclude [byte double float])
   (:import [java.nio ByteBuffer]
            [java.nio.channels FileChannel]
            [java.util.zip CRC32]))
