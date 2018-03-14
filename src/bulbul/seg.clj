@@ -71,6 +71,11 @@
           (.close raf)))
       (.close raf))))
 
+(defn- remove-invalid-files [rest-index-file-map]
+  (doseq [{fd :fd {file :file} :meta} rest-index-file-map]
+    (.close fd)
+    (.delete file)))
+
 (defn- load-segment-files [codec index-file-map]
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
@@ -79,9 +84,13 @@
           (if integrity
             (recur (rest index-file-map)
                    (conj result (assoc current-seg :last-index last-index))
-                   last-index)))
-        ;; TODO: delete skipped files
-        result)
+                   last-index)
+            (do
+              (remove-invalid-files (rest index-file-map))
+              result)))
+        (do
+          (remove-invalid-files (rest index-file-map))
+          result))
       result)))
 
 (defn- segment-file [config id]
@@ -123,9 +132,6 @@
   (-> files
       (map #(.close (:fd %)))
       (dorun)))
-
-(defn get-next-index [store]
-  )
 
 (defn append-entry [store entry-data]
   )
