@@ -83,7 +83,7 @@
         (let [[integrity last-index] (load-last-index (:fd current-seg) codec)]
           (if integrity
             (recur (rest index-file-map)
-                   (conj result (assoc current-seg :last-index last-index))
+                   (conj result (assoc current-seg :last-index (atom last-index)))
                    last-index)
             (do
               (remove-invalid-files (rest index-file-map))
@@ -115,7 +115,7 @@
             :max-entry (:max-entry config)
             :file file}
      :start-index index
-     :last-index index
+     :last-index (atom index)
      :id id}))
 
 (defn load-seg-directory [dir codec]
@@ -125,7 +125,7 @@
          (map open-segment-file)
          doall
          (filter some?)
-         (sort-by :index)
+         (sort-by (comp - :index))
          (load-segment-files codec))))
 
 (defn close-seg-files [files]
@@ -134,17 +134,22 @@
       (dorun)))
 
 (defn append-entry [store entry-data]
-  )
+  (let [seg (first (:segs @(.-state store)))
+        last-index-atom (:last-index seg)
+        codec (:codec (.-config store))]
+    (bc/wrap-crc32-block! (:fd seg) codec entry-data)
+    (swap! last-index-atom inc)))
 
 (extend-protocol p/LogStore
   SegmentLog
   (open! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc
-             :files logs
+             :segs logs
              :open? true)))
 
-  (write! [this entry])
+  (write! [this entry]
+    (append-entry this entry))
 
   #_(write! [this entry index])
 
