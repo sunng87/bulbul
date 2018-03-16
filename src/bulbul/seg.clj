@@ -35,13 +35,13 @@
         config (merge (segment-log-default-config) config)]
     (SegmentLog. state config)))
 
-(defn- load-last-index [fd codec]
+(defn- load-last-index [fd]
   (let [current-index (:last-index fd)
         file-channel (:fd fd)
         file-size (.size file-channel)]
     (loop [idx current-index]
       (if (< (.position file-channel) (dec file-size))
-        (if-let [item (bc/unwrap-crc32-block file-channel codec false)]
+        (if (bc/unwrap-crc32-block file-channel)
           (recur (inc idx))
           (do
             [false idx]))
@@ -76,11 +76,11 @@
     (.close fd)
     (.delete file)))
 
-(defn- load-segment-files [codec index-file-map]
+(defn- load-segment-files [index-file-map]
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
-        (let [[integrity last-index] (load-last-index (:fd current-seg) codec)]
+        (let [[integrity last-index] (load-last-index (:fd current-seg))]
           (if integrity
             (recur (rest index-file-map)
                    (conj result (assoc current-seg :last-index (atom last-index)))
@@ -118,7 +118,7 @@
      :last-index (atom index)
      :id id}))
 
-(defn load-seg-directory [dir codec]
+(defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
               (.mkdirs))]
     (->> (file-seq dir)
@@ -126,19 +126,35 @@
          doall
          (filter some?)
          (sort-by (comp - :index))
-         (load-segment-files codec))))
+         load-segment-files)))
 
 (defn close-seg-files [files]
   (-> files
       (map #(.close (:fd %)))
       (dorun)))
 
+(defn seg-full? [seg new-buffer-size]
+  (or
+   ;; max-entries
+   (> (- @(:last-index seg) (:start-index seg))
+      (-> seg :meta :max-entry))
+   (> (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
+      (-> seg :meta :max-size))))
+
 (defn append-entry [store entry-data]
-  (let [seg (first (:segs @(.-state store)))
-        last-index-atom (:last-index seg)
-        codec (:codec (.-config store))]
-    (bc/wrap-crc32-block! (:fd seg) codec entry-data)
-    (swap! last-index-atom inc)))
+  (let [codec (:codec (.-config store))
+        entry-buffer (bc/encode codec entry-data)
+        seg (first (:segs @(.-state store)))
+        seg (if (seg-full? seg (.. entry-buffer flip remaining))
+              (let [new-seg (create-segment-file (inc (:id seg))
+                                                 (inc @(:last-index seg))
+                                                 (.-config store))]
+                ;; FIXME: order
+                (swap! (.-state store) update :segs conj new-seg)
+                new-seg)
+              seg)]
+    (bc/wrap-crc32-block! (:fd seg) entry-buffer)
+    (swap! (:last-index seg) inc)))
 
 (extend-protocol p/LogStore
   SegmentLog
@@ -150,8 +166,6 @@
 
   (write! [this entry]
     (append-entry this entry))
-
-  #_(write! [this entry index])
 
   (reset-index! [this index])
 
