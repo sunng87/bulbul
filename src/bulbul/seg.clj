@@ -21,18 +21,17 @@
 (defrecord SegmentLog [state config])
 
 (defn segment-log-initial-state []
-  {:index 0
-   :id 0})
+  {})
 
 (defn segment-log-default-config []
   {:directory "./bulbul_log"
    :max-entry 1000000
-   :max-size (* 5 1024 1024)
+   :max-size (* 200 1024 1024)
    :version version})
 
-(defn segment-log [config]
+(defn segment-log [codec config]
   (let [state (atom (segment-log-initial-state))
-        config (merge (segment-log-default-config) config)]
+        config (merge (segment-log-default-config) config {:codec codec})]
     (SegmentLog. state config)))
 
 (defn- load-last-index [fd]
@@ -125,7 +124,7 @@
          (map open-segment-file)
          doall
          (filter some?)
-         (sort-by (comp - :index))
+         (apply sorted-set-by #(> (:start-index %1) (:start-index %2)))
          load-segment-files)))
 
 (defn close-seg-files [files]
@@ -149,7 +148,6 @@
               (let [new-seg (create-segment-file (inc (:id seg))
                                                  (inc @(:last-index seg))
                                                  (.-config store))]
-                ;; FIXME: order
                 (swap! (.-state store) update :segs conj new-seg)
                 new-seg)
               seg)]
