@@ -5,7 +5,7 @@
   "A protocol for log stores."
   (open! [this] "Open the log store, load and hold metadata.")
   (write! [this entry] "Append entry to log store.")
-  (reset-index! [this index] "Reset current index")
+  (truncate! [this index] "Reset current index")
   (flush! [this] "Flush buffer, ensure data written to disk.")
   (read [this] "Read log store, may return lazy-seq for logs.")
   (close! [this] "Close the log store."))

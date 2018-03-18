@@ -34,16 +34,18 @@
         config (merge (segment-log-default-config) config {:codec codec})]
     (SegmentLog. state config)))
 
-(defn- load-last-index [fd]
-  (let [current-index (:last-index fd)
+(defn- move-to-index! [fd search-index]
+  (let [current-index (:start-index fd)
         file-channel (:fd fd)
         file-size (.size file-channel)]
     (loop [idx current-index]
       (if (< (.position file-channel) (dec file-size))
         (if (bc/unwrap-crc32-block file-channel)
-          (recur (inc idx))
-          (do
-            [false idx]))
+          (let [next-idx (inc idx)]
+            (if (= next-idx search-index)
+              [true idx]
+              (recur next-idx)))
+          [false idx])
         [true idx]))))
 
 (defn open-segment-file [file]
@@ -70,8 +72,8 @@
           (.close raf)))
       (.close raf))))
 
-(defn- remove-invalid-files [rest-index-file-map]
-  (doseq [{fd :fd {file :file} :meta} rest-index-file-map]
+(defn- close-and-remove-segs! [index-file-map]
+  (doseq [{fd :fd {file :file} :meta} index-file-map]
     (.close fd)
     (.delete file)))
 
@@ -79,16 +81,16 @@
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
-        (let [[integrity last-index] (load-last-index (:fd current-seg))]
+        (let [[integrity last-index] (move-to-index! (:fd current-seg) -1)]
           (if integrity
             (recur (rest index-file-map)
                    (conj result (assoc current-seg :last-index (atom last-index)))
                    last-index)
             (do
-              (remove-invalid-files (rest index-file-map))
+              (close-and-remove-segs! (rest index-file-map))
               result)))
         (do
-          (remove-invalid-files (rest index-file-map))
+          (close-and-remove-segs! (rest index-file-map))
           result))
       result)))
 
@@ -117,6 +119,9 @@
      :last-index (atom index)
      :id id}))
 
+(defn- into-sorted-segs [segs]
+  (apply sorted-set-by #(> (:start-index %1) (:start-index %2)) segs))
+
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
               (.mkdirs))]
@@ -124,10 +129,10 @@
          (map open-segment-file)
          doall
          (filter some?)
-         (apply sorted-set-by #(> (:start-index %1) (:start-index %2)))
+         into-sorted-segs
          load-segment-files)))
 
-(defn close-seg-files [files]
+(defn close-seg-files! [files]
   (-> files
       (map #(.close (:fd %)))
       (dorun)))
@@ -140,7 +145,7 @@
    (> (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
       (-> seg :meta :max-size))))
 
-(defn append-entry [store entry-data]
+(defn append-entry! [store entry-data]
   (let [codec (:codec (.-config store))
         entry-buffer (bc/encode codec entry-data)
         seg (first (:segs @(.-state store)))
@@ -154,6 +159,15 @@
     (bc/wrap-crc32-block! (:fd seg) entry-buffer)
     (swap! (:last-index seg) inc)))
 
+(defn truncate-to-index! [store index]
+  (let [{truncated-segs true retained-segs false}
+        (group-by #(>= (:start-index %) index) (:segs @(.-state store)))
+        current-seg (first retained-segs)]
+    (move-to-index! current-seg index)
+    (reset! (:last-index current-seg) (dec index))
+    (close-and-remove-segs! truncated-segs)
+    (swap! (.-state store) assoc :segs (into-sorted-segs retained-segs))))
+
 (extend-protocol p/LogStore
   SegmentLog
   (open! [this]
@@ -163,14 +177,14 @@
              :open? true)))
 
   (write! [this entry]
-    (append-entry this entry))
+    (append-entry! this entry))
 
-  (reset-index! [this index])
+  (truncate! [this index])
 
   (flush! [this])
 
   (read [this])
 
   (close! [this]
-    (close-seg-files (:files @(.-state this)))
+    (close-seg-files! (:files @(.-state this)))
     (swap! (.-state this) assoc :open? false)))
