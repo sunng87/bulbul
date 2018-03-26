@@ -1,11 +1,16 @@
-(ns bulbul.protocol
-  (:refer-clojure :exclude [read]))
+(ns bulbul.protocol)
 
-(defprotocol LogStore
-  "A protocol for log stores."
+(defprotocol LogStoreWriter
+  "A protocol for writting to log stores."
   (open! [this] "Open the log store, load and hold metadata.")
   (write! [this entry] "Append entry to log store.")
   (truncate! [this index] "Reset current index")
   (flush! [this] "Flush buffer, ensure data written to disk.")
-  (read [this] "Read log store, may return lazy-seq for logs.")
   (close! [this] "Close the log store."))
+
+(defprotocol LogStoreReader
+  "A protocol for reading from log stores."
+  (open! [this] "Open log store reader")
+  (take-log [this n] "take n items from current reader")
+  (reset! [this n] "reset current index to n")
+  (close! [this] "close the reader"))

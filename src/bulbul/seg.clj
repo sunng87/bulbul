@@ -35,18 +35,21 @@
     (SegmentLog. state config)))
 
 (defn- move-to-index! [fd search-index]
-  (let [current-index (:start-index fd)
+  (let [current-index @(:last-index fd)
         file-channel (:fd fd)
-        file-size (.size file-channel)]
-    (loop [idx current-index]
-      (if (< (.position file-channel) (dec file-size))
-        (if (bc/unwrap-crc32-block file-channel)
-          (let [next-idx (inc idx)]
-            (if (= next-idx search-index)
-              [true idx]
-              (recur next-idx)))
-          [false idx])
-        [true idx]))))
+        file-size (.size file-channel)
+        [integrity index] (loop [idx current-index]
+                            (if (< (.position file-channel) (dec file-size))
+                              (if (bc/unwrap-crc32-block file-channel)
+                                (let [next-idx (inc idx)]
+                                  (if (= next-idx search-index)
+                                    [true idx]
+                                    (recur next-idx)))
+                                [false idx])
+                              [true idx]))]
+    ;; keep the index sync with file cursor
+    (reset! (:last-index fd) index)
+    [integrity index]))
 
 (defn open-segment-file [file]
   (let [raf (.getChannel (RandomAccessFile. file "rw"))
@@ -67,6 +70,7 @@
                     :max-entry max-entry
                     :file file}
              :start-index index
+             :last-index (atom index)
              :id id})
           ;; not a bulbul file
           (.close raf)))
@@ -84,7 +88,7 @@
         (let [[integrity last-index] (move-to-index! (:fd current-seg) -1)]
           (if integrity
             (recur (rest index-file-map)
-                   (conj result (assoc current-seg :last-index (atom last-index)))
+                   (conj result current-seg)
                    last-index)
             (do
               (close-and-remove-segs! (rest index-file-map))
@@ -148,43 +152,66 @@
 (defn append-entry! [store entry-data]
   (let [codec (:codec (.-config store))
         entry-buffer (bc/encode codec entry-data)
-        seg (first (:segs @(.-state store)))
+        seg (first (:writer-segs @(.-state store)))
         seg (if (seg-full? seg (.. entry-buffer flip remaining))
               (let [new-seg (create-segment-file (inc (:id seg))
                                                  (inc @(:last-index seg))
                                                  (.-config store))]
-                (swap! (.-state store) update :segs conj new-seg)
+                (swap! (.-state store) update :writer-segs conj new-seg)
                 new-seg)
               seg)]
     (bc/wrap-crc32-block! (:fd seg) entry-buffer)
     (swap! (:last-index seg) inc)))
 
+(defn reset-to-index! [segs index]
+  (let [the-seg (first (drop-while #(>= (:start-index %) index)))]
+    (if (< (:last-index the-seg) index)
+      ;; seek forward
+
+      ;; reset to 0 and seek forward
+      (do
+        ;; FIXME:
+        (.position (:fd the-seg) header-total-size)
+        (move-to-index! the-seg index)))))
+
 (defn truncate-to-index! [store index]
   (let [{truncated-segs true retained-segs false}
-        (group-by #(>= (:start-index %) index) (:segs @(.-state store)))
+        (group-by #(>= (:start-index %) index) (:writer-segs @(.-state store)))
         current-seg (first retained-segs)]
     (move-to-index! current-seg index)
-    (reset! (:last-index current-seg) (dec index))
     (close-and-remove-segs! truncated-segs)
-    (swap! (.-state store) assoc :segs (into-sorted-segs retained-segs))))
+    (swap! (.-state store) assoc :writer-segs (into-sorted-segs retained-segs))))
 
-(extend-protocol p/LogStore
+(extend-protocol p/LogStoreWriter
   SegmentLog
   (open! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc
-             :segs logs
+             :writer-segs logs
              :open? true)))
 
   (write! [this entry]
     (append-entry! this entry))
 
-  (truncate! [this index])
+  (truncate! [this index]
+    (truncate-to-index! this index))
 
   (flush! [this])
-
-  (read [this])
 
   (close! [this]
     (close-seg-files! (:files @(.-state this)))
     (swap! (.-state this) assoc :open? false)))
+
+(extend-protocol p/LogStoreReader
+  SegmentLog
+  (open! [this]
+    (let [logs (load-seg-directory (:directory (.-config this)))]
+      (swap! (.-state this) assoc :reader-segs logs)))
+
+  (take-log [this n]
+    ;; TODO: read log from current index
+    )
+
+  (reset! [this n]
+    ;; TODO: move-to-index!
+    ))
