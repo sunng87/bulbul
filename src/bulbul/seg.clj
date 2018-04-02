@@ -35,8 +35,12 @@
     (SegmentLog. state config)))
 
 (defn- move-to-index! [fd search-index]
-  (let [current-index @(:last-index fd)
-        file-channel (:fd fd)
+  (let [file-channel (:fd fd)
+        current-index (if (< search-index @(:last-index fd))
+                        (do
+                          (.position file-channel header-total-size)
+                          (:start-index fd))
+                        @(:last-index fd))
         file-size (.size file-channel)
         [integrity index] (loop [idx current-index]
                             (if (< (.position file-channel) (dec file-size))
@@ -165,14 +169,7 @@
 
 (defn reset-to-index! [segs index]
   (let [the-seg (first (drop-while #(>= (:start-index %) index)))]
-    (if (< (:last-index the-seg) index)
-      ;; seek forward
-
-      ;; reset to 0 and seek forward
-      (do
-        ;; FIXME:
-        (.position (:fd the-seg) header-total-size)
-        (move-to-index! the-seg index)))))
+    (move-to-index! the-seg index)))
 
 (defn truncate-to-index! [store index]
   (let [{truncated-segs true retained-segs false}
@@ -212,6 +209,6 @@
     ;; TODO: read log from current index
     )
 
-  (reset! [this n]
+  (reset-to! [this n]
     ;; TODO: move-to-index!
     ))

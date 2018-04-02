@@ -12,5 +12,5 @@
   "A protocol for reading from log stores."
   (open! [this] "Open log store reader")
   (take-log [this n] "take n items from current reader")
-  (reset! [this n] "reset current index to n")
+  (reset-to! [this n] "reset current index to n")
   (close! [this] "close the reader"))
