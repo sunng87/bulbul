@@ -1,7 +1,8 @@
 (ns bulbul.seg
   (:require [bulbul.protocol :as p]
             [bulbul.codec :as bc]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.data.avl :as cda])
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer]))
 
@@ -128,7 +129,7 @@
      :id id}))
 
 (defn- into-sorted-segs [segs]
-  (apply sorted-set-by #(> (:start-index %1) (:start-index %2)) segs))
+  (into (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))) segs))
 
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
@@ -172,8 +173,8 @@
     (move-to-index! the-seg index)))
 
 (defn truncate-to-index! [store index]
-  (let [{truncated-segs true retained-segs false}
-        (group-by #(>= (:start-index %) index) (:writer-segs @(.-state store)))
+  (let [[truncated-segs _ retained-segs] (cda/split-key {:start-index index}
+                                                        (:writer-segs @(.-state store)))
         current-seg (first retained-segs)]
     (move-to-index! current-seg index)
     (close-and-remove-segs! truncated-segs)
@@ -181,7 +182,7 @@
 
 (extend-protocol p/LogStoreWriter
   SegmentLog
-  (open! [this]
+  (open-writer! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc
              :writer-segs logs
@@ -195,13 +196,13 @@
 
   (flush! [this])
 
-  (close! [this]
+  (close-writer! [this]
     (close-seg-files! (:files @(.-state this)))
     (swap! (.-state this) assoc :open? false)))
 
 (extend-protocol p/LogStoreReader
   SegmentLog
-  (open! [this]
+  (open-reader! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc :reader-segs logs)))
 
@@ -211,4 +212,7 @@
 
   (reset-to! [this n]
     ;; TODO: move-to-index!
+    )
+
+  (close-reader! [this]
     ))
