@@ -157,7 +157,7 @@
 (defn append-entry! [store entry-data]
   (let [codec (:codec (.-config store))
         entry-buffer (bc/encode codec entry-data)
-        seg (first (:writer-segs @(.-state store)))
+        seg (last (:writer-segs @(.-state store)))
         seg (if (seg-full? seg (.. entry-buffer flip remaining))
               (let [new-seg (create-segment-file (inc (:id seg))
                                                  (inc @(:last-index seg))
@@ -197,18 +197,33 @@
   (flush! [this])
 
   (close-writer! [this]
-    (close-seg-files! (:files @(.-state this)))
+    (close-seg-files! (:writer-segs @(.-state this)))
     (swap! (.-state this) assoc :open? false)))
+
+(defn next-entry-in-seg [seg]
+  (bc/unwrap-crc32-block (:fd seg)))
+
+(defn next-entry [store]
+  (let [reader-segs (:reader-segs @(.-state store))
+        current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
+    (when current-seg
+      (let [next-entry (next-entry-in-seg current-seg)]
+        (if (nil? next-entry)
+          ;; jump to next seg
+          (do
+            (swap! (.-state store) update :current-reader-seg-index inc)
+            (next-entry store))
+          next-entry)))))
 
 (extend-protocol p/LogStoreReader
   SegmentLog
   (open-reader! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
-      (swap! (.-state this) assoc :reader-segs logs)))
+      (swap! (.-state this) assoc
+             :reader-segs logs :current-reader-seg-index 0)))
 
   (take-log [this n]
-    ;; TODO: read log from current index
-    )
+    (take-while some? (repeatedly n #(next-entry this))))
 
   (reset-to! [this n]
     ;; TODO: move-to-index!
