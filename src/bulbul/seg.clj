@@ -35,13 +35,13 @@
         config (merge (segment-log-default-config) config {:codec codec})]
     (SegmentLog. state config)))
 
-(defn- move-to-index! [fd search-index]
-  (let [file-channel (:fd fd)
-        current-index (if (< search-index @(:last-index fd))
+(defn- move-to-index! [seg search-index]
+  (let [file-channel (:fd seg)
+        current-index (if (< search-index @(:last-index seg))
                         (do
                           (.position file-channel header-total-size)
-                          (:start-index fd))
-                        @(:last-index fd))
+                          (:start-index seg))
+                        @(:last-index seg))
         file-size (.size file-channel)
         [integrity index] (loop [idx current-index]
                             (if (< (.position file-channel) (dec file-size))
@@ -53,7 +53,7 @@
                                 [false idx])
                               [true idx]))]
     ;; keep the index sync with file cursor
-    (reset! (:last-index fd) index)
+    (reset! (:last-index seg) index)
     [integrity index]))
 
 (defn open-segment-file [file]
@@ -203,6 +203,7 @@
 (defn next-entry-in-seg [seg]
   (bc/unwrap-crc32-block (:fd seg)))
 
+;; FIXME: maintain last index
 (defn next-entry [store]
   (let [reader-segs (:reader-segs @(.-state store))
         current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
@@ -223,11 +224,13 @@
              :reader-segs logs :current-reader-seg-index 0)))
 
   (take-log [this n]
+    ;; TODO: reset reader index when jump to next file
     (take-while some? (repeatedly n #(next-entry this))))
 
   (reset-to! [this n]
     ;; TODO: move-to-index!
-    )
+    (let [seg-for-n (cda/nearest (:reader-segs @(.-state this)) <= {:start-index n})]
+      (move-to-index! seg-for-n n)))
 
   (close-reader! [this]
     ))
