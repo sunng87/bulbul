@@ -203,6 +203,14 @@
 (defn next-entry-in-seg [seg]
   (bc/unwrap-crc32-block (:fd seg)))
 
+(defn jump-to-next-reader-seg!
+  "jump to next segment for reader"
+  [store]
+  (let [reader-index (swap! (.-state store) update :current-reader-seg-index inc)
+        next-seg (-> @(.-state store) :reader-segs (nth reader-index))]
+    (reset! (:last-index next-seg) (:start-index next-seg))
+    (.position (:fd next-seg) 0)))
+
 (defn read-next-entry [store]
   (let [reader-segs (:reader-segs @(.-state store))
         current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
@@ -211,11 +219,11 @@
         (if (nil? next-entry)
           ;; jump to next seg
           (do
-            (swap! (.-state store) update :current-reader-seg-index inc)
+            (jump-to-next-reader-seg! store)
             (read-next-entry store))
           (do
             (swap! (.-state store) update-in
-                   [:reader-segs :current-read-seg-index :last-index]
+                   [:reader-segs :current-reader-seg-index :last-index]
                    inc)
             next-entry))))))
 
@@ -227,13 +235,11 @@
              :reader-segs logs :current-reader-seg-index 0)))
 
   (take-log [this n]
-    ;; TODO: reset reader index when jump to next file
     (take-while some? (repeatedly n #(read-next-entry this))))
 
   (reset-to! [this n]
-    ;; TODO: move-to-index!
     (let [seg-for-n (cda/nearest (:reader-segs @(.-state this)) <= {:start-index n})]
       (move-to-index! seg-for-n n)))
 
   (close-reader! [this]
-    ))
+    (close-seg-files! (:reader-segs @(.-state this)))))
