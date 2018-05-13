@@ -203,8 +203,7 @@
 (defn next-entry-in-seg [seg]
   (bc/unwrap-crc32-block (:fd seg)))
 
-;; FIXME: maintain last index
-(defn next-entry [store]
+(defn read-next-entry [store]
   (let [reader-segs (:reader-segs @(.-state store))
         current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
     (when current-seg
@@ -213,8 +212,12 @@
           ;; jump to next seg
           (do
             (swap! (.-state store) update :current-reader-seg-index inc)
-            (next-entry store))
-          next-entry)))))
+            (read-next-entry store))
+          (do
+            (swap! (.-state store) update-in
+                   [:reader-segs :current-read-seg-index :last-index]
+                   inc)
+            next-entry))))))
 
 (extend-protocol p/LogStoreReader
   SegmentLog
@@ -225,7 +228,7 @@
 
   (take-log [this n]
     ;; TODO: reset reader index when jump to next file
-    (take-while some? (repeatedly n #(next-entry this))))
+    (take-while some? (repeatedly n #(read-next-entry this))))
 
   (reset-to! [this n]
     ;; TODO: move-to-index!
