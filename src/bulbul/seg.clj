@@ -185,8 +185,7 @@
   (open-writer! [this]
     (let [logs (load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc
-             :writer-segs logs
-             :open? true)))
+             :writer-segs logs)))
 
   (write! [this entry]
     (append-entry! this entry))
@@ -197,8 +196,7 @@
   (flush! [this])
 
   (close-writer! [this]
-    (close-seg-files! (:writer-segs @(.-state this)))
-    (swap! (.-state this) assoc :open? false)))
+    (close-seg-files! (:writer-segs @(.-state this)))))
 
 (defn next-entry-in-seg [seg]
   (bc/unwrap-crc32-block (:fd seg)))
