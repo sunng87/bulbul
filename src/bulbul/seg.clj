@@ -35,7 +35,7 @@
         config (merge (segment-log-default-config) config {:codec codec})]
     (SegmentLog. state config)))
 
-(defn- move-to-index! [seg search-index]
+(defn move-to-index! [seg search-index]
   (let [file-channel (:fd seg)
         current-index (if (< search-index @(:last-index seg))
                         (do
@@ -81,12 +81,12 @@
           (.close raf)))
       (.close raf))))
 
-(defn- close-and-remove-segs! [index-file-map]
+(defn close-and-remove-segs! [index-file-map]
   (doseq [{fd :fd {file :file} :meta} index-file-map]
     (.close fd)
     (.delete file)))
 
-(defn- load-segment-files [index-file-map]
+(defn load-segment-files [index-file-map]
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
@@ -103,32 +103,7 @@
           result))
       result)))
 
-(defn- segment-file [config id]
-  (io/file (str (:directory config) "/" (:name config) ".log." id)))
-
-(defn create-segment-file [id index config]
-  (let [file (segment-file config id)
-        raf (.getChannel (RandomAccessFile. file "rw"))
-        hb (ByteBuffer/allocate header-total-size)]
-    (.put hb magic-number)
-    (.putInt hb (:version config))
-    (.putInt raf id)
-    (.putLong raf index)
-    (.putInt (:max-size config))
-    (.putInt (:max-entry config))
-
-    (.write raf hb)
-
-    {:fd raf
-     :meta {:version version
-            :max-size (:max-size config)
-            :max-entry (:max-entry config)
-            :file file}
-     :start-index index
-     :last-index (atom index)
-     :id id}))
-
-(defn- into-sorted-segs [segs]
+(defn into-sorted-segs [segs]
   (into (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))) segs))
 
 (defn load-seg-directory [dir]
@@ -146,98 +121,6 @@
       (map #(.close (:fd %)))
       (dorun)))
 
-(defn seg-full? [seg new-buffer-size]
-  (or
-   ;; max-entries
-   (> (- @(:last-index seg) (:start-index seg))
-      (-> seg :meta :max-entry))
-   (> (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
-      (-> seg :meta :max-size))))
-
-(defn append-entry! [store entry-data]
-  (let [codec (:codec (.-config store))
-        entry-buffer (bc/encode codec entry-data)
-        seg (last (:writer-segs @(.-state store)))
-        seg (if (seg-full? seg (.. entry-buffer flip remaining))
-              (let [new-seg (create-segment-file (inc (:id seg))
-                                                 (inc @(:last-index seg))
-                                                 (.-config store))]
-                (swap! (.-state store) update :writer-segs conj new-seg)
-                new-seg)
-              seg)]
-    (bc/wrap-crc32-block! (:fd seg) entry-buffer)
-    (swap! (:last-index seg) inc)))
-
-(defn reset-to-index! [segs index]
+#_(defn reset-to-index! [segs index]
   (let [the-seg (first (drop-while #(>= (:start-index %) index)))]
     (move-to-index! the-seg index)))
-
-(defn truncate-to-index! [store index]
-  (let [[truncated-segs _ retained-segs] (cda/split-key {:start-index index}
-                                                        (:writer-segs @(.-state store)))
-        current-seg (first retained-segs)]
-    (move-to-index! current-seg index)
-    (close-and-remove-segs! truncated-segs)
-    (swap! (.-state store) assoc :writer-segs (into-sorted-segs retained-segs))))
-
-(extend-protocol p/LogStoreWriter
-  SegmentLog
-  (open-writer! [this]
-    (let [logs (load-seg-directory (:directory (.-config this)))]
-      (swap! (.-state this) assoc
-             :writer-segs logs)))
-
-  (write! [this entry]
-    (append-entry! this entry))
-
-  (truncate! [this index]
-    (truncate-to-index! this index))
-
-  (flush! [this])
-
-  (close-writer! [this]
-    (close-seg-files! (:writer-segs @(.-state this)))))
-
-(defn next-entry-in-seg [seg]
-  (bc/unwrap-crc32-block (:fd seg)))
-
-(defn jump-to-next-reader-seg!
-  "jump to next segment for reader"
-  [store]
-  (let [reader-index (swap! (.-state store) update :current-reader-seg-index inc)
-        next-seg (-> @(.-state store) :reader-segs (nth reader-index))]
-    (reset! (:last-index next-seg) (:start-index next-seg))
-    (.position (:fd next-seg) 0)))
-
-(defn read-next-entry [store]
-  (let [reader-segs (:reader-segs @(.-state store))
-        current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
-    (when current-seg
-      (let [next-entry (next-entry-in-seg current-seg)]
-        (if (nil? next-entry)
-          ;; jump to next seg
-          (do
-            (jump-to-next-reader-seg! store)
-            (read-next-entry store))
-          (do
-            (swap! (.-state store) update-in
-                   [:reader-segs :current-reader-seg-index :last-index]
-                   inc)
-            next-entry))))))
-
-(extend-protocol p/LogStoreReader
-  SegmentLog
-  (open-reader! [this]
-    (let [logs (load-seg-directory (:directory (.-config this)))]
-      (swap! (.-state this) assoc
-             :reader-segs logs :current-reader-seg-index 0)))
-
-  (take-log [this n]
-    (take-while some? (repeatedly n #(read-next-entry this))))
-
-  (reset-to! [this n]
-    (let [seg-for-n (cda/nearest (:reader-segs @(.-state this)) <= {:start-index n})]
-      (move-to-index! seg-for-n n)))
-
-  (close-reader! [this]
-    (close-seg-files! (:reader-segs @(.-state this)))))
