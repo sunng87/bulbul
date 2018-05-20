@@ -6,7 +6,7 @@
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer]))
 
-(def magic-number (.getBytes "BULBULLOG1" "UTF-8"))
+(def magic-number (.getBytes "BULO" "UTF-8"))
 (def version 1)
 (def header-total-size 128)
 (def header-current-size
