@@ -1,5 +1,6 @@
 (ns bulbul.codec
   (:refer-clojure :exclude [byte double float])
+  (:require [bulbul.utils :as u])
   (:import [java.nio ByteBuffer]
            [java.nio.channels FileChannel]
            [java.util.zip CRC32]))
@@ -214,18 +215,25 @@
   ((:decoder codec) buffer))
 
 (defn crc32 [byte-buffer]
-  (let [v (doto (CRC32.) (.update byte-buffer) (.getValue))]
+  (let [v (doto (CRC32.) (.update byte-buffer))]
     (.flip byte-buffer)
-    v))
+    (.getValue v)))
 
 (def buffer-meta-size 12)
+
+(defn unsigned-int-to-bytes [uint]
+  (byte-array (map #(u/normalize-ubyte (bit-and (bit-shift-right uint (* 8 %)) 0xFF)) (range 3 -1 -1))))
+
+(defn unsigned-int-from-bytes [ba]
+  (reduce #(bit-or %1 (bit-shift-left (u/denormalize-ubyte (aget ba %2)) (* 8 (- 3 %2))))
+          0 (range 4)))
 
 (defn wrap-crc32-block! [^FileChannel fc byte-buffer]
   (let [block-length (.remaining byte-buffer)
         crc-value (crc32 byte-buffer)
         buffer (ByteBuffer/allocate (+ block-length buffer-meta-size))]
     (.putInt buffer block-length)
-    (.putLong buffer crc-value)
+    (.put buffer (unsigned-int-to-bytes crc-value))
     (.put buffer (.flip byte-buffer))
 
     (.flip buffer)
@@ -239,7 +247,7 @@
         result (when (= len 12)
                  (.flip block-meta-buffer)
                  (let [byte-length (.readInt block-meta-buffer)
-                       crc-value (.readLong block-meta-buffer)
+                       crc-value (.readInt block-meta-buffer)
                        content-buffer (ByteBuffer/allocate byte-length)]
                    (when (= (.read fc content-buffer) byte-length)
                      (when (= crc-value (crc32 (.flip content-buffer)))

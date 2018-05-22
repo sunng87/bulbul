@@ -26,8 +26,8 @@
 
 (defn segment-log-default-config []
   {:directory "./bulbul_log"
-   :max-entry 1000000
-   :max-size (* 200 1024 1024)
+   :max-entry 1_000_000
+   :max-size (* 20 1024 1024)
    :version version})
 
 (defn segment-log [codec config]
@@ -109,7 +109,7 @@
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
               (.mkdirs))]
-    (->> (file-seq dir)
+    (->> (.listFiles dir)
          (map open-segment-file)
          doall
          (filter some?)

@@ -17,10 +17,10 @@
         hb (ByteBuffer/allocate seg/header-total-size)]
     (.put hb seg/magic-number)
     (.putInt hb seg/version)
-    (.putInt raf id)
-    (.putLong raf index)
-    (.putInt (:max-size config))
-    (.putInt (:max-entry config))
+    (.putInt hb id)
+    (.putLong hb index)
+    (.putInt hb (:max-size config))
+    (.putInt hb (:max-entry config))
 
     (.write raf hb)
 
@@ -45,9 +45,10 @@
   (let [codec (:codec (.-config store))
         entry-buffer (bc/encode codec entry-data)
         seg (last (:writer-segs @(.-state store)))
-        seg (if (seg-full? seg (.. entry-buffer flip remaining))
-              (let [new-seg (create-segment-file (inc (:id seg))
-                                                 (inc @(:last-index seg))
+        seg (if (or (nil? seg)
+                    (seg-full? seg (.. entry-buffer flip remaining)))
+              (let [new-seg (create-segment-file (if seg (inc (:id seg)) 0)
+                                                 (if seg (inc @(:last-index seg)) 0)
                                                  (.-config store))]
                 (swap! (.-state store) update :writer-segs conj new-seg)
                 new-seg)
