@@ -16,13 +16,14 @@
         raf (.getChannel (RandomAccessFile. file "rw"))
         hb (ByteBuffer/allocate seg/header-total-size)]
     (.put hb seg/magic-number)
-    (.putInt hb seg/version)
+    (.put hb ^byte seg/version)
     (.putInt hb id)
     (.putLong hb index)
     (.putInt hb (:max-size config))
     (.putInt hb (:max-entry config))
+    (.put hb seg/header-retain-padding)
 
-    (.write raf hb)
+    (.write raf (.flip hb))
 
     {:fd raf
      :meta {:version seg/version
@@ -50,11 +51,19 @@
               (let [new-seg (create-segment-file (if seg (inc (:id seg)) 0)
                                                  (if seg (inc @(:last-index seg)) 0)
                                                  (.-config store))]
+                ;; flash previous seg
+                (when (some? seg) (.force (:fd seg) true))
                 (swap! (.-state store) update :writer-segs conj new-seg)
                 new-seg)
               seg)]
     (bc/wrap-crc32-block! (:fd seg) entry-buffer)
     (swap! (:last-index seg) inc)))
+
+(defn append-entries! [store entries]
+  (doseq [e entries]
+    (append-entry! store e))
+  (let [seg (last (:writer-segs @(.-state store)))]
+    (.force (:fd seg) false)))
 
 (defn truncate-to-index! [store index]
   (let [[truncated-segs _ retained-segs] (cda/split-key {:start-index index}
@@ -72,7 +81,10 @@
              :writer-segs logs)))
 
   (write! [this entry]
-    (append-entry! this entry))
+    (append-entries! this [entry]))
+
+  (write-all! [this entries]
+    (append-entries! this entries))
 
   (truncate! [this index]
     (truncate-to-index! this index))

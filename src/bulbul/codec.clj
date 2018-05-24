@@ -209,6 +209,7 @@
   ([codec data ^ByteBuffer buffer]
    ((:encoder codec) data buffer))
   ([codec data]
+   ;; FIXME: buffer overflow
    (encode codec data (ByteBuffer/allocate 256))))
 
 (defn decode [codec ^ByteBuffer buffer]
@@ -219,7 +220,7 @@
     (.flip byte-buffer)
     (.getValue v)))
 
-(def buffer-meta-size 12)
+(def buffer-meta-size 8)
 
 (defn unsigned-int-to-bytes [uint]
   (byte-array (map #(u/normalize-ubyte (bit-and (bit-shift-right uint (* 8 %)) 0xFF)) (range 3 -1 -1))))
@@ -229,12 +230,12 @@
           0 (range 4)))
 
 (defn wrap-crc32-block! [^FileChannel fc byte-buffer]
-  (let [block-length (.remaining byte-buffer)
+  (let [block-length (.remaining (.flip byte-buffer))
         crc-value (crc32 byte-buffer)
         buffer (ByteBuffer/allocate (+ block-length buffer-meta-size))]
     (.putInt buffer block-length)
     (.put buffer (unsigned-int-to-bytes crc-value))
-    (.put buffer (.flip byte-buffer))
+    (.put buffer byte-buffer)
 
     (.flip buffer)
 

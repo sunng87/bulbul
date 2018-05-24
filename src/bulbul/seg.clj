@@ -7,17 +7,19 @@
            [java.nio ByteBuffer]))
 
 (def magic-number (.getBytes "BULO" "UTF-8"))
-(def version 1)
+(def version (byte 1))
 (def header-total-size 128)
 (def header-current-size
   (+ (alength magic-number)
-     2 ;; version
-     2 ;; id
-     4 ;; index
-     2 ;; max-size
-     2 ;; max-entry
+     1 ;; version
+     4 ;; id
+     8 ;; index
+     4 ;; max-size
+     4 ;; max-entry
      ))
 (def header-retain-size (- header-total-size header-current-size))
+(assert (>= header-retain-size 0))
+(def header-retain-padding (byte-array header-retain-size))
 
 (defrecord SegmentLog [state config])
 
@@ -25,8 +27,9 @@
   {})
 
 (defn segment-log-default-config []
-  {:directory "./bulbul_log"
-   :max-entry 1_000_000
+  {:directory "./bulbullog"
+   :name "bulbul"
+   :max-entry 1000000
    :max-size (* 20 1024 1024)
    :version version})
 
