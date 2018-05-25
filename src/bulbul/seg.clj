@@ -21,6 +21,9 @@
 (assert (>= header-retain-size 0))
 (def header-retain-padding (byte-array header-retain-size))
 
+(defn segment-file [config id]
+  (io/file (str (:directory config) "/" (:name config) ".log." id)))
+
 (defrecord SegmentLog [state config])
 
 (defn segment-log-initial-state []
@@ -65,13 +68,14 @@
         header-size (.read raf hb)]
     (if (= header-size header-total-size)
       (let [magic-number-array (byte-array (alength magic-number))]
+        (.flip hb)
         (.get hb magic-number-array)
         (if (= (seq magic-number) (seq magic-number-array))
           (let [version (.getInt hb)
                 id (.getInt hb)
-                index (.getLong raf)
-                max-size (.getInt raf)
-                max-entry (.getInt raf)]
+                index (.getLong hb)
+                max-size (.getInt hb)
+                max-entry (.getInt hb)]
             {:fd raf
              :meta {:version version
                     :max-size max-size
