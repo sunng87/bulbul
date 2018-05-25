@@ -90,8 +90,8 @@
     (truncate-to-index! this index))
 
   (flush! [this]
-    ;; TODO:
-    )
+    (doseq [fd (map :fd (:writer-segs @(.-state this)))]
+      (.force fd true)))
 
   (close-writer! [this]
     (seg/close-seg-files! (:writer-segs @(.-state this)))))
