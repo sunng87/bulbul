@@ -26,7 +26,11 @@
 
         (bp/write! bullog [1 200])
         (is (= 1 (count (.listFiles (io/file dir)))))
-        (is (> (.length (io/file dir)) 0)))
+        (is (> (.length (io/file dir)) 0))
+
+        (is (= 1 (count (:writer-segs @(.-state bullog)))))
+        (is (= (count (:writer-segs @(.-state bullog)))
+               (count (:seg-files @(.-state bullog))))))
       (finally
         #_(delete-dir dir)
         #_(is (not (.exists (io/file dir))))))))

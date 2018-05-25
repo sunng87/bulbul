@@ -209,7 +209,6 @@
   ([codec data ^ByteBuffer buffer]
    ((:encoder codec) data buffer))
   ([codec data]
-   ;; FIXME: buffer overflow
    (encode codec data (ByteBuffer/allocate 256))))
 
 (defn decode [codec ^ByteBuffer buffer]

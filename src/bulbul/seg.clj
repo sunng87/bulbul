@@ -113,15 +113,18 @@
 (defn into-sorted-segs [segs]
   (into (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))) segs))
 
+(defn load-seg-files [files]
+  (->> files
+       (map open-segment-file)
+       doall
+       (filter some?)
+       into-sorted-segs
+       load-segment-files))
+
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
               (.mkdirs))]
-    (->> (.listFiles dir)
-         (map open-segment-file)
-         doall
-         (filter some?)
-         into-sorted-segs
-         load-segment-files)))
+    (load-seg-files (.listFiles dir))))
 
 (defn close-seg-files! [files]
   (-> files

@@ -37,9 +37,18 @@
 (extend-protocol p/LogStoreReader
   SegmentLog
   (open-reader! [this]
-    (let [logs (seg/load-seg-directory (:directory (.-config this)))]
-      (swap! (.-state this) assoc
-             :reader-segs logs :current-reader-seg-index 0)))
+    (if-let [seg-files (not-empty (:seg-files @(.-state this)))]
+      ;; writer already opened
+      (let [segs (seg/load-seg-files seg-files)]
+        (swap! (.-state this) assoc
+               :reader-segs segs
+               :current-reader-seg-index 0))
+      ;; no opened writer
+      (let [segs (seg/load-seg-directory (:directory (.-config this)))]
+        (swap! (.-state this) assoc
+               :reader-segs segs
+               :current-reader-seg-index 0
+               :seg-files (mapv (comp :file :meta) segs)))))
 
   (take-log [this n]
     (take-while some? (repeatedly n #(read-next-entry this))))
