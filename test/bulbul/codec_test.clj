@@ -6,7 +6,10 @@
 
 (deftest test-codecs
   (are [data codec]
-      (is (= data (sut/decode codec (.rewind (sut/encode codec data)))))
+      (is (= data (sut/decode codec
+                              (.. (sut/encode codec data)
+                                  (rewind)
+                                  (position sut/record-padding)))))
 
     (clojure.core/byte 1) (sut/byte)
     1 (sut/int16)
@@ -38,15 +41,17 @@
         buffer (ByteBuffer/allocate 60)]
     (.putInt buffer 50)
     (.put buffer (.getBytes "Hello World" "UTF-8"))
-    (.flip buffer)
+    (.position (.rewind buffer) sut/record-padding)
 
     (is (nil? (sut/decode codec buffer)))))
 
 (deftest test-byte-block
-  (let [buffer (ByteBuffer/allocate 5)
+  (let [buffer (ByteBuffer/allocate 9)
         bytes (.getBytes "Hello World" "UTF-8")
         codec (sut/byte-block :prefix (sut/int16))]
 
-    (let [buffer (.rewind (sut/encode codec bytes buffer))
+    (let [buffer (.. (sut/encode codec bytes buffer)
+                     (rewind)
+                     (position sut/record-padding))
           bytes (sut/decode codec buffer)]
       (is (= "Hello World" (String. bytes "UTF-8"))))))

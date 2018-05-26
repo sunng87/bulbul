@@ -205,8 +205,12 @@
   (decoder [options ^ByteBuffer buffer]
            (first options)))
 
+(def record-padding 8)
+
 (defn encode
   ([codec data ^ByteBuffer buffer]
+   ;; leave first 8 byte for record length and crc32
+   (.position buffer record-padding)
    ((:encoder codec) data buffer))
   ([codec data]
    (encode codec data (ByteBuffer/allocate 256))))
@@ -229,16 +233,18 @@
           0 (range 4)))
 
 (defn wrap-crc32-block! [^FileChannel fc byte-buffer]
-  (let [block-length (.remaining (.flip byte-buffer))
-        crc-value (crc32 byte-buffer)
-        buffer (ByteBuffer/allocate (+ block-length buffer-meta-size))]
-    (.putInt buffer block-length)
-    (.put buffer (unsigned-int-to-bytes crc-value))
-    (.put buffer byte-buffer)
+  (let [block-length (- (.remaining (.flip byte-buffer)) record-padding)
+        crc-value (crc32 byte-buffer)]
+    ;; move cursor to beginning
+    (.position byte-buffer 0)
+    (.putInt byte-buffer block-length)
+    (.put byte-buffer (unsigned-int-to-bytes crc-value))
 
-    (.flip buffer)
+    ;; flip the buffer
+    (.position byte-buffer 0)
+    (.limit byte-buffer block-length)
 
-    (.write fc buffer)))
+    (.write fc byte-buffer)))
 
 (defn unwrap-crc32-block [^FileChannel fc]
   (let [cur-pos (.position fc)
