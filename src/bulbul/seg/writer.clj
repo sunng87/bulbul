@@ -21,7 +21,7 @@
     (.putInt hb (:max-entry config))
     (.put hb seg/header-retain-padding)
 
-    (.write raf (.flip hb))
+    (.write ^FileChannel raf ^ByteBuffer (.flip hb))
 
     {:fd raf
      :meta {:version seg/version

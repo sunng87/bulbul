@@ -244,7 +244,7 @@
     (.position byte-buffer 0)
     (.limit byte-buffer block-length)
 
-    (.write fc byte-buffer)))
+    (.write ^FileChannel fc ^ByteBuffer byte-buffer)))
 
 (defn unwrap-crc32-block [^FileChannel fc]
   (let [cur-pos (.position fc)
