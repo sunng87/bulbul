@@ -10,17 +10,32 @@
 (defn next-entry-in-seg [seg]
   (bc/unwrap-crc32-block (:fd seg)))
 
+(defn- open-next-file! [store reader-index]
+  (let [new-seg-file (nth (:seg-files @(.-state store)) reader-index)
+        new-seg (seg/open-segment-file new-seg-file)]
+    ;; online file, skip verification for now
+    (swap! (.-state store) update :reader-segs conj new-seg)))
+
 (defn jump-to-next-reader-seg!
   "jump to next segment for reader"
   [store]
-  (let [reader-index (swap! (.-state store) update :current-reader-seg-index inc)
-        next-seg (-> @(.-state store) :reader-segs (nth reader-index))]
-    (reset! (:last-index next-seg) (:start-index next-seg))
-    (.position (:fd next-seg) 0)))
+  (let [next-reader-index (inc (:current-reader-seg-index @(.-state store)))
+        next-seg (-> @(.-state store) :reader-segs (nth next-reader-index))]
+    (if (some? next-seg)
+      (do
+        ;; move cursor
+        (reset! (:last-index next-seg) (:start-index next-seg))
+        (.position (:fd next-seg) 0)
+        (swap! (.-state store) update :current-reader-index inc))
+      ;; test if new files opened by writer so we can advance
+      (when (< next-reader-index (count (:seg-files @(.-state store))))
+        (open-next-file! store next-reader-index)
+        (swap! (.-state store) update :current-reader-index inc)))))
 
 (defn read-next-entry [store]
   (let [reader-segs (:reader-segs @(.-state store))
-        current-seg (nth reader-segs (:current-reader-seg-index @(.-state store)))]
+        seg-index (:current-reader-seg-index @(.-state store))
+        current-seg (nth reader-segs seg-index)]
     (when current-seg
       (let [next-entry (next-entry-in-seg current-seg)]
         (if (nil? next-entry)
@@ -30,7 +45,7 @@
             (read-next-entry store))
           (do
             (swap! (.-state store) update-in
-                   [:reader-segs :current-reader-seg-index :last-index]
+                   [:reader-segs seg-index :last-index]
                    inc)
             next-entry))))))
 

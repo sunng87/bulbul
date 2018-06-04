@@ -93,7 +93,7 @@
     (.close fd)
     (.delete file)))
 
-(defn load-segment-files [index-file-map]
+(defn verify-segment-files [index-file-map]
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
@@ -119,7 +119,7 @@
        doall
        (filter some?)
        into-sorted-segs
-       load-segment-files))
+       verify-segment-files))
 
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
