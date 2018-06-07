@@ -52,4 +52,12 @@
 
       (is (= 2 (count (.listFiles (io/file dir)))))
 
+      ;; internal state
+      (is (= 2 (count (:seg-files @(.-state bullog)))))
+      (is (= 2 (count (:writer-segs @(.-state bullog)))))
+      (is (= 0 (:start-index (first (:writer-segs @(.-state bullog))))))
+      (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog))))))
+      (is (= 2 (:start-index (last (:writer-segs @(.-state bullog))))))
+      (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog))))))
+
       (bp/close-writer! bullog))))

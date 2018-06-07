@@ -82,7 +82,7 @@
                     :max-entry max-entry
                     :file file}
              :start-index index
-             :last-index (atom index)
+             :last-index (atom (dec index))
              :id id})
           ;; not a bulbul file
           (.close raf)))

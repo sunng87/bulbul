@@ -29,14 +29,14 @@
             :max-entry (:max-entry config)
             :file file}
      :start-index index
-     :last-index (atom index)
+     :last-index (atom (dec index))
      :id id}))
 
 (defn seg-full? [seg new-buffer-size]
   (or
-   ;; max-entries
-   (>= (- @(:last-index seg) (:start-index seg))
-      (-> seg :meta :max-entry))
+   ;; max-entries, last-index is includsive so we add 1 here
+   (>= (+ 1 (- @(:last-index seg) (:start-index seg)))
+       (-> seg :meta :max-entry))
    (>= (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
        (-> seg :meta :max-size))))
 
