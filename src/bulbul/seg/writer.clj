@@ -35,10 +35,10 @@
 (defn seg-full? [seg new-buffer-size]
   (or
    ;; max-entries
-   (> (- @(:last-index seg) (:start-index seg))
+   (>= (- @(:last-index seg) (:start-index seg))
       (-> seg :meta :max-entry))
-   (> (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
-      (-> seg :meta :max-size))))
+   (>= (+ new-buffer-size bc/buffer-meta-size (.position (:fd seg)))
+       (-> seg :meta :max-size))))
 
 (defn append-new-seg! [store new-seg]
   (swap! (.-state store)
@@ -54,7 +54,7 @@
         entry-buffer (bc/encode codec entry-data)
         seg (last (:writer-segs @(.-state store)))
         seg (if (or (nil? seg)
-                    (seg-full? seg (.. entry-buffer flip remaining)))
+                    (seg-full? seg (.. entry-buffer position)))
               (let [new-seg (create-segment-file (if seg (inc (:id seg)) 0)
                                                  (if seg (inc @(:last-index seg)) 0)
                                                  (.-config store))]

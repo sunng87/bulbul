@@ -17,20 +17,39 @@
     (doseq [f (reverse files)]
       (io/delete-file f true))))
 
+(defmacro with-test-dir [binding & body]
+  (let [dir-symbol (first binding)]
+    `(let ~binding
+       (try
+         ~@body
+         (finally
+           (delete-dir ~dir-symbol)
+           (is (not (.exists (io/file ~dir-symbol)))))))))
+
 (deftest test-seg-writer
-  (let [dir "target/bulbulwritetest/"]
-    (try
-      (let [bullog (s/segment-log default-codec {:directory dir})]
-        (bp/open-writer! bullog)
-        (is (.exists (io/file dir)))
+  (with-test-dir [dir "target/bulbulwritetest/"]
+    (let [bullog (s/segment-log default-codec {:directory dir})]
+      (bp/open-writer! bullog)
+      (is (.exists (io/file dir)))
 
-        (bp/write! bullog [1 200])
-        (is (= 1 (count (.listFiles (io/file dir)))))
-        (is (> (.length (io/file dir)) 0))
+      (bp/write! bullog [1 200])
+      (is (= 1 (count (.listFiles (io/file dir)))))
+      (is (> (.length (io/file dir)) 0))
 
-        (is (= 1 (count (:writer-segs @(.-state bullog)))))
-        (is (= (count (:writer-segs @(.-state bullog)))
-               (count (:seg-files @(.-state bullog))))))
-      (finally
-        #_(delete-dir dir)
-        #_(is (not (.exists (io/file dir))))))))
+      (is (= 1 (count (:writer-segs @(.-state bullog)))))
+      (is (= (count (:writer-segs @(.-state bullog)))
+             (count (:seg-files @(.-state bullog)))))
+      (bp/close-writer! bullog))))
+
+(deftest test-seg-writer-create-new-seg
+  (with-test-dir [dir "target/bulbultest"]
+    (let [bullog (s/segment-log default-codec {:directory dir
+                                               :max-entry 2})]
+      (bp/open-writer! bullog)
+
+      (doseq [n (range 200 203)]
+        (bp/write! bullog [1 n]))
+
+      (is (= 2 (count (.listFiles (io/file dir)))))
+
+      (bp/close-writer! bullog))))

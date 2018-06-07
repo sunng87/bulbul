@@ -126,10 +126,9 @@
               (.mkdirs))]
     (load-seg-files (.listFiles dir))))
 
-(defn close-seg-files! [files]
-  (-> files
-      (map #(.close (:fd %)))
-      (dorun)))
+(defn close-seg-files! [segs]
+  (doseq [s segs]
+    (.close (:fd s))))
 
 #_(defn reset-to-index! [segs index]
   (let [the-seg (first (drop-while #(>= (:start-index %) index)))]
