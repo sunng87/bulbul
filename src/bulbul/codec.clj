@@ -205,8 +205,6 @@
   (decoder [options ^ByteBuffer buffer]
            (first options)))
 
-(def record-padding 8)
-
 (defn encode
   ([codec data ^ByteBuffer buffer]
    ;; leave first 8 byte for record length and crc32
@@ -233,8 +231,8 @@
           0 (range 4)))
 
 (defn wrap-crc32-block! [^FileChannel fc byte-buffer]
-  (let [block-length (- (.remaining (.flip byte-buffer)) record-padding)
-        crc-value (crc32 byte-buffer)]
+  (let [block-length (- (.position byte-buffer) buffer-meta-size)
+        crc-value (crc32 (.position (.flip byte-buffer) 8))]
     ;; move cursor to beginning
     (.position byte-buffer 0)
     (.putInt byte-buffer block-length)
@@ -242,7 +240,6 @@
 
     ;; flip the buffer
     (.position byte-buffer 0)
-    (.limit byte-buffer block-length)
 
     (.write ^FileChannel fc ^ByteBuffer byte-buffer)))
 
@@ -250,14 +247,16 @@
   (let [cur-pos (.position fc)
         block-meta-buffer (ByteBuffer/allocate buffer-meta-size)
         len (.read fc block-meta-buffer)
-        result (when (= len 12)
+        result (when (= len buffer-meta-size)
                  (.flip block-meta-buffer)
-                 (let [byte-length (.readInt block-meta-buffer)
-                       crc-value (.readInt block-meta-buffer)
+                 (let [byte-length (.getInt block-meta-buffer)
+                       crc-bytes (byte-array 4)
+                       _ (.get block-meta-buffer crc-bytes)
+                       crc-value (unsigned-int-from-bytes crc-bytes)
                        content-buffer (ByteBuffer/allocate byte-length)]
                    (when (= (.read fc content-buffer) byte-length)
                      (when (= crc-value (crc32 (.flip content-buffer)))
-                       (.flip content-buffer)))))]
+                       content-buffer))))]
     (if (some? result)
       result
       (do
