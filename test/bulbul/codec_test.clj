@@ -12,7 +12,7 @@
       (is (= data (sut/decode codec
                               (.. (sut/encode codec data)
                                   (rewind)
-                                  (position sut/record-padding)))))
+                                  (position sut/buffer-meta-size)))))
 
     (clojure.core/byte 1) (sut/byte)
     1 (sut/int16)
@@ -44,7 +44,7 @@
         buffer (ByteBuffer/allocate 60)]
     (.putInt buffer 50)
     (.put buffer (.getBytes "Hello World" "UTF-8"))
-    (.position (.rewind buffer) sut/record-padding)
+    (.position (.rewind buffer) sut/buffer-meta-size)
 
     (is (nil? (sut/decode codec buffer)))))
 
@@ -55,7 +55,7 @@
 
     (let [buffer (.. (sut/encode codec bytes buffer)
                      (rewind)
-                     (position sut/record-padding))
+                     (position sut/buffer-meta-size))
           bytes (sut/decode codec buffer)]
       (is (= "Hello World" (String. bytes "UTF-8"))))))
 

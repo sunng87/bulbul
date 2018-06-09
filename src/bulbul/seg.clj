@@ -4,7 +4,8 @@
             [clojure.java.io :as io]
             [clojure.data.avl :as cda])
   (:import [java.io RandomAccessFile]
-           [java.nio ByteBuffer]))
+           [java.nio ByteBuffer]
+           [java.nio.channels FileChannel]))
 
 (def magic-number (.getBytes "BULO" "UTF-8"))
 (def version (byte 1))
@@ -42,10 +43,10 @@
     (SegmentLog. state config)))
 
 (defn move-to-index! [seg search-index]
-  (let [file-channel (:fd seg)
+  (let [file-channel ^FileChannel (:fd seg)
         current-index (if (<= search-index @(:last-index seg))
                         (do
-                          (.position file-channel header-total-size)
+                          (.position file-channel ^long header-total-size)
                           (:start-index seg))
                         @(:last-index seg))
         file-size (.size file-channel)
@@ -98,7 +99,6 @@
     (.delete file)))
 
 (defn verify-segment-files [index-file-map]
-  #dbg
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))

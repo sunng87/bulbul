@@ -205,10 +205,12 @@
   (decoder [options ^ByteBuffer buffer]
            (first options)))
 
+(def buffer-meta-size 8)
+
 (defn encode
   ([codec data ^ByteBuffer buffer]
    ;; leave first 8 byte for record length and crc32
-   (.position buffer record-padding)
+   (.position buffer buffer-meta-size)
    ((:encoder codec) data buffer))
   ([codec data]
    (encode codec data (ByteBuffer/allocate 256))))
@@ -220,8 +222,6 @@
   (let [v (doto (CRC32.) (.update byte-buffer))]
     (.flip byte-buffer)
     (.getValue v)))
-
-(def buffer-meta-size 8)
 
 (defn unsigned-int-to-bytes [uint]
   (byte-array (map #(u/normalize-ubyte (bit-and (bit-shift-right uint (* 8 %)) 0xFF)) (range 3 -1 -1))))
