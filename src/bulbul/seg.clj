@@ -43,7 +43,7 @@
 
 (defn move-to-index! [seg search-index]
   (let [file-channel (:fd seg)
-        current-index (if (< search-index @(:last-index seg))
+        current-index (if (<= search-index @(:last-index seg))
                         (do
                           (.position file-channel header-total-size)
                           (:start-index seg))
@@ -54,10 +54,14 @@
                               (if (bc/unwrap-crc32-block file-channel)
                                 (let [next-idx (inc idx)]
                                   (if (= next-idx search-index)
+                                    ;; return the search index, with
+                                    ;; the item unread
                                     [true idx]
                                     (recur next-idx)))
-                                [false idx])
-                              [true idx]))]
+                                ;; dec to last valid id
+                                [false (dec idx)])
+                              ;; dec to last valid id
+                              [true (dec idx)]))]
     ;; keep the index sync with file cursor
     (reset! (:last-index seg) index)
     [integrity index]))
@@ -71,7 +75,7 @@
         (.flip hb)
         (.get hb magic-number-array)
         (if (= (seq magic-number) (seq magic-number-array))
-          (let [version (.getInt hb)
+          (let [version (.get hb)
                 id (.getInt hb)
                 index (.getLong hb)
                 max-size (.getInt hb)
@@ -94,10 +98,11 @@
     (.delete file)))
 
 (defn verify-segment-files [index-file-map]
+  #dbg
   (loop [segs index-file-map result [] previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
-        (let [[integrity last-index] (move-to-index! (:fd current-seg) -1)]
+        (let [[integrity last-index] (move-to-index! current-seg -1)]
           (if integrity
             (recur (rest index-file-map)
                    (conj result current-seg)
@@ -115,8 +120,7 @@
 
 (defn load-seg-files [files]
   (->> files
-       (map open-segment-file)
-       doall
+       (mapv open-segment-file)
        (filter some?)
        into-sorted-segs
        verify-segment-files))
@@ -124,7 +128,7 @@
 (defn load-seg-directory [dir]
   (let [dir (doto (io/file dir)
               (.mkdirs))]
-    (load-seg-files (.listFiles dir))))
+    (load-seg-files (into [] (.listFiles dir)))))
 
 (defn close-seg-files! [segs]
   (doseq [s segs]

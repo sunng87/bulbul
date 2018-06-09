@@ -61,3 +61,28 @@
       (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog))))))
 
       (bp/close-writer! bullog))))
+
+(deftest test-reopen-and-append
+  (let [the-dir "target/bulbultest"]
+    (let [bullog1 (s/segment-log default-codec {:directory the-dir
+                                                :max-entry 2})]
+      (bp/open-writer! bullog1)
+
+      (doseq [n (range 200 203)]
+        (bp/write! bullog1 [1 n]))
+
+      (bp/close-writer! bullog1))
+
+    (with-test-dir [dir the-dir]
+      (let [bullog2 (s/segment-log default-codec {:directory dir
+                                                  :max-entry 2})]
+        (bp/open-writer! bullog2)
+
+        (is (= 2 (count (:seg-files @(.-state bullog2)))))
+        (is (= 2 (count (:writer-segs @(.-state bullog2)))))
+        (is (= 0 (:start-index (first (:writer-segs @(.-state bullog2))))))
+        (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog2))))))
+        (is (= 2 (:start-index (last (:writer-segs @(.-state bullog2))))))
+        (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog2))))))
+
+        (bp/close-writer! bullog2)))))
