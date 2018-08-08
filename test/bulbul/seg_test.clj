@@ -86,3 +86,22 @@
         (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog2))))))
 
         (bp/close-writer! bullog2)))))
+
+(deftest test-truncate
+  (testing "truncate writer to some position in current file"
+    (let [the-dir "target/bulbultest"]
+      (with-test-dir [dir the-dir]
+        (let [bullog1 (s/segment-log default-codec {:directory dir
+                                                    :max-entry 10})]
+          (bp/open-writer! bullog1)
+
+          (doseq [n (range 200 205)]
+            (bp/write! bullog1 [1 n]))
+
+          (bp/truncate! bullog1 2)
+
+          (is (= 1 @(:last-index (last (:writer-segs @(.-state bullog1))))))
+
+          (bp/write! bullog1 [1 399])
+
+          (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog1)))))))))))

@@ -73,11 +73,13 @@
     (.force ^FileChannel (:fd seg) false)))
 
 (defn truncate-to-index! [store index]
-  (let [[truncated-segs _ retained-segs] (cda/split-key {:start-index index}
+  (let [[retained-segs _ truncated-segs] (cda/split-key {:start-index index}
                                                         (:writer-segs @(.-state store)))
-        current-seg (first retained-segs)]
+        current-seg (last retained-segs)]
     (seg/move-to-index! current-seg index)
-    (seg/close-and-remove-segs! truncated-segs)
+    (when-not (empty? truncated-segs)
+      (seg/close-and-remove-segs! truncated-segs))
+    ;; TODO: readers?
     (swap! (.-state store) assoc :writer-segs (seg/into-sorted-segs retained-segs))))
 
 (extend-protocol p/LogStoreWriter

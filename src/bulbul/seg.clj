@@ -98,8 +98,11 @@
     (.close fd)
     (.delete file)))
 
+(defn empty-tree []
+  (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))))
+
 (defn verify-segment-files [index-file-map]
-  (loop [segs index-file-map result [] previous-last-index -1]
+  (loop [segs index-file-map result (empty-tree) previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
         (let [[integrity last-index] (move-to-index! current-seg -1)]
@@ -116,7 +119,7 @@
       result)))
 
 (defn into-sorted-segs [segs]
-  (into (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))) segs))
+  (into (empty-tree) segs))
 
 (defn load-seg-files [files]
   (->> files
