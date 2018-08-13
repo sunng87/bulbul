@@ -104,4 +104,29 @@
 
           (bp/write! bullog1 [1 399])
 
-          (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog1)))))))))))
+          (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog1))))))))))
+
+  (testing "truncate writer to some position in previous file"
+    (let [the-dir "target/bulbultest"]
+      (with-test-dir [dir the-dir]
+        (let [bullog1 (s/segment-log default-codec {:directory dir
+                                                    :max-entry 10})]
+          (bp/open-writer! bullog1)
+
+          (doseq [n (range 200 233)]
+            (bp/write! bullog1 [1 n]))
+
+          (is (= 32 @(:last-index (last (:writer-segs @(.-state bullog1))))))
+          (is (= 4 (count (:seg-files @(.-state bullog1)))))
+          (is (= 4 (count (:writer-segs @(.-state bullog1)))))
+
+          (bp/truncate! bullog1 15)
+
+          (is (= 14 @(:last-index (last (:writer-segs @(.-state bullog1))))))
+          ;; FIXME: close seg files
+          (is (= 2 (count (:seg-files @(.-state bullog1)))))
+          (is (= 2 (count (:writer-segs @(.-state bullog1)))))
+
+          (bp/write! bullog1 [1 399])
+
+          (is (= 15 @(:last-index (last (:writer-segs @(.-state bullog1)))))))))))
