@@ -37,8 +37,6 @@
       (is (> (.length (io/file dir)) 0))
 
       (is (= 1 (count (:writer-segs @(.-state bullog)))))
-      (is (= (count (:writer-segs @(.-state bullog)))
-             (count (:seg-files @(.-state bullog)))))
       (bp/close-writer! bullog))))
 
 (deftest test-seg-writer-create-new-seg
@@ -53,7 +51,6 @@
       (is (= 2 (count (.listFiles (io/file dir)))))
 
       ;; internal state
-      (is (= 2 (count (:seg-files @(.-state bullog)))))
       (is (= 2 (count (:writer-segs @(.-state bullog)))))
       (is (= 0 (:start-index (first (:writer-segs @(.-state bullog))))))
       (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog))))))
@@ -78,7 +75,6 @@
                                                   :max-entry 2})]
         (bp/open-writer! bullog2)
 
-        (is (= 2 (count (:seg-files @(.-state bullog2)))))
         (is (= 2 (count (:writer-segs @(.-state bullog2)))))
         (is (= 0 (:start-index (first (:writer-segs @(.-state bullog2))))))
         (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog2))))))
@@ -117,14 +113,11 @@
             (bp/write! bullog1 [1 n]))
 
           (is (= 32 @(:last-index (last (:writer-segs @(.-state bullog1))))))
-          (is (= 4 (count (:seg-files @(.-state bullog1)))))
           (is (= 4 (count (:writer-segs @(.-state bullog1)))))
 
           (bp/truncate! bullog1 15)
 
           (is (= 14 @(:last-index (last (:writer-segs @(.-state bullog1))))))
-          ;; FIXME: close seg files
-          (is (= 2 (count (:seg-files @(.-state bullog1)))))
           (is (= 2 (count (:writer-segs @(.-state bullog1)))))
 
           (bp/write! bullog1 [1 399])

@@ -45,9 +45,7 @@
          (fn [state]
            (-> state
                ;; append to writer-segs
-               (update :writer-segs conj new-seg)
-               ;; append to opened files
-               (update :seg-files conj (-> new-seg :meta :file))))))
+               (update :writer-segs conj new-seg)))))
 
 (defn append-entry! [store entry-data]
   (let [codec (:codec (.-config store))
@@ -79,16 +77,16 @@
     (seg/move-to-index! current-seg index)
     (when-not (empty? truncated-segs)
       (seg/close-and-remove-segs! truncated-segs))
-    ;; TODO: readers?
-    (swap! (.-state store) assoc :writer-segs (seg/into-sorted-segs retained-segs))))
+    ;; TODO: reanders
+    (swap! (.-state store) assoc
+           :writer-segs (seg/into-sorted-segs retained-segs))))
 
 (extend-protocol p/LogStoreWriter
   SegmentLog
   (open-writer! [this]
     (let [segs (seg/load-seg-directory (:directory (.-config this)))]
       (swap! (.-state this) assoc
-             :writer-segs segs
-             :seg-files (mapv (comp :file :meta) segs))))
+             :writer-segs segs)))
 
   (write! [this entry]
     (append-entries! this [entry]))
@@ -104,4 +102,5 @@
       (.force ^FileChannel fd true)))
 
   (close-writer! [this]
-    (seg/close-seg-files! (:writer-segs @(.-state this)))))
+    (seg/close-seg-files! (:writer-segs @(.-state this)))
+    (swap! (.-state this) dissoc :writer-segs)))
