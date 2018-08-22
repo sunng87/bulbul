@@ -77,7 +77,6 @@
     (seg/move-to-index! current-seg index)
     (when-not (empty? truncated-segs)
       (seg/close-and-remove-segs! truncated-segs))
-    ;; TODO: reanders
     (swap! (.-state store) assoc
            :writer-segs (seg/into-sorted-segs retained-segs))))
 

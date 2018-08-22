@@ -48,10 +48,12 @@
                         (do
                           (.position file-channel ^long header-total-size)
                           (:start-index seg))
-                        @(:last-index seg))
+                        ;; move to a search-index that larger than
+                        ;; current last index
+                        (inc @(:last-index seg)))
         file-size (.size file-channel)
         [integrity index] (loop [idx current-index]
-                            (if (< (.position file-channel) (dec file-size))
+                            (if (< (.position file-channel) file-size)
                               (if (bc/unwrap-crc32-block file-channel)
                                 (let [next-idx (inc idx)]
                                   (if (= next-idx search-index)
