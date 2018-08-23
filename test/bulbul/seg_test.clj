@@ -28,7 +28,8 @@
 
 (defn list-dir [dir]
   ;; drop first, which is current dir
-  (rest (file-seq (io/file dir))))
+  (filter #(not (clojure.string/starts-with? (.getName %) "."))
+          (rest (file-seq (io/file dir)))))
 
 (deftest test-seg-writer
   (with-test-dir [dir "target/bulbulwritetest/"]
@@ -37,7 +38,7 @@
       (is (.exists (io/file dir)))
 
       (bp/write! bullog [1 200])
-      (is (= 1 (count (.listFiles (io/file dir)))))
+      (is (= 1 (count (list-dir dir))))
       (is (> (.length (io/file dir)) 0))
 
       (is (= 1 (count (:writer-segs @(.-state bullog)))))
@@ -52,7 +53,7 @@
       (doseq [n (range 200 203)]
         (bp/write! bullog [1 n]))
 
-      (is (= 2 (count (.listFiles (io/file dir)))))
+      (is (= 2 (count (list-dir dir))))
 
       ;; internal state
       (is (= 2 (count (:writer-segs @(.-state bullog)))))

@@ -7,6 +7,9 @@
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer]
            [java.nio.channels FileChannel]
+           [java.nio.file Files FileSystems Path
+            OpenOption StandardOpenOption]
+           [java.nio.file.attribute FileAttribute]
            [bulbul.seg SegmentLog]))
 
 (defn create-segment-file [id index config]
@@ -80,12 +83,25 @@
     (swap! (.-state store) assoc
            :writer-segs (seg/into-sorted-segs retained-segs))))
 
+(defn- open-file-channel [& path-seg]
+  (let [path (.. (FileSystems/getDefault)
+                 (getPath (first path-seg) (into-array String (rest path-seg))))]
+    (Files/createDirectories (.getParent path) (into-array FileAttribute []))
+    (FileChannel/open path (into-array OpenOption [StandardOpenOption/WRITE StandardOpenOption/CREATE]))))
+
 (extend-protocol p/LogStoreWriter
   SegmentLog
   (open-writer! [this]
-    (let [segs (seg/load-seg-directory (:directory (.-config this)))]
-      (swap! (.-state this) assoc
-             :writer-segs segs)))
+    (let [dir (:directory (.-config this))
+          lock-file (open-file-channel dir ".lock")]
+      (if-let [lock (.tryLock lock-file)]
+        (let [segs (seg/load-seg-directory dir)]
+          (swap! (.-state this) assoc
+                 :writer-segs segs
+                 :writer-lock lock-file))
+        (do
+          (.close lock-file)
+          (throw (IllegalStateException. "Directory is locked by another process."))))))
 
   (write! [this entry]
     (append-entries! this [entry]))
@@ -102,4 +118,5 @@
 
   (close-writer! [this]
     (seg/close-seg-files! (:writer-segs @(.-state this)))
-    (swap! (.-state this) dissoc :writer-segs)))
+    (.close (:writer-lock @(.-state this)))
+    (swap! (.-state this) dissoc :writer-segs :writer-lock)))
