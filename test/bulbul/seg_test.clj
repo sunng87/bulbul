@@ -45,24 +45,44 @@
       (bp/close-writer! bullog))))
 
 (deftest test-seg-writer-create-new-seg
-  (with-test-dir [dir "target/bulbultest"]
-    (let [bullog (s/segment-log default-codec {:directory dir
-                                               :max-entry 2})]
-      (bp/open-writer! bullog)
+  (testing "test max-entry"
+    (with-test-dir [dir "target/bulbultest"]
+      (let [bullog (s/segment-log default-codec {:directory dir
+                                                 :max-entry 2})]
+        (bp/open-writer! bullog)
 
-      (doseq [n (range 200 203)]
-        (bp/write! bullog [1 n]))
+        (doseq [n (range 200 203)]
+          (bp/write! bullog [1 n]))
 
-      (is (= 2 (count (list-dir dir))))
+        (is (= 2 (count (list-dir dir))))
 
-      ;; internal state
-      (is (= 2 (count (:writer-segs @(.-state bullog)))))
-      (is (= 0 (:start-index (first (:writer-segs @(.-state bullog))))))
-      (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog))))))
-      (is (= 2 (:start-index (last (:writer-segs @(.-state bullog))))))
-      (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog))))))
+        ;; internal state
+        (is (= 2 (count (:writer-segs @(.-state bullog)))))
+        (is (= 0 (:start-index (first (:writer-segs @(.-state bullog))))))
+        (is (= 1 @(:last-index (first (:writer-segs @(.-state bullog))))))
+        (is (= 2 (:start-index (last (:writer-segs @(.-state bullog))))))
+        (is (= 2 @(:last-index (last (:writer-segs @(.-state bullog))))))
 
-      (bp/close-writer! bullog))))
+        (bp/close-writer! bullog))))
+  (testing "test max-size"
+    (with-test-dir [dir "target/bulbultest"]
+      (let [bullog (s/segment-log default-codec {:directory dir
+                                                 :max-size 1024})]
+        (bp/open-writer! bullog)
+        ;; 128 + (8 + 5) * n
+        ;; n >= 68
+        (doseq [i (range 0 69)]
+          (bp/write! bullog [1 i]))
+
+        (is (= 2 (count (list-dir dir))))
+        ;; internal state
+        (is (= 2 (count (:writer-segs @(.-state bullog)))))
+        (is (= 0 (:start-index (first (:writer-segs @(.-state bullog))))))
+        (is (= 67 @(:last-index (first (:writer-segs @(.-state bullog))))))
+        (is (= 68 (:start-index (last (:writer-segs @(.-state bullog))))))
+        (is (= 68 @(:last-index (last (:writer-segs @(.-state bullog))))))
+
+        (bp/close-writer! bullog)))))
 
 (deftest test-reopen-and-append
   (let [the-dir "target/bulbultest"]
