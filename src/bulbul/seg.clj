@@ -109,7 +109,7 @@
       (if (= previous-last-index (dec (:start-index current-seg)))
         (let [[integrity last-index] (move-to-index! current-seg -1)]
           (if integrity
-            (recur (rest index-file-map)
+            (recur (rest segs)
                    (conj result current-seg)
                    last-index)
             (do
