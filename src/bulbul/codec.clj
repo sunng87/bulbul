@@ -224,11 +224,14 @@
     (.getValue v)))
 
 (defn unsigned-int-to-bytes [uint]
-  (byte-array (map #(u/normalize-ubyte (bit-and (bit-shift-right uint (* 8 %)) 0xFF)) (range 3 -1 -1))))
+  (.. (ByteBuffer/allocate 8)
+      (putInt (unchecked-int uint))
+      (array)))
 
-(defn unsigned-int-from-bytes [ba]
-  (reduce #(bit-or %1 (bit-shift-left (u/denormalize-ubyte (aget ba %2)) (* 8 (- 3 %2))))
-          0 (range 4)))
+(defn unsigned-int-from-bytes [bytes]
+  (bit-and (.. (ByteBuffer/wrap bytes)
+               (getInt))
+           0xFFFFFFFF))
 
 (defn wrap-crc32-block! [^FileChannel fc byte-buffer]
   (let [block-length (- (.position byte-buffer) buffer-meta-size)

@@ -79,3 +79,13 @@
 
       (finally
         (Files/deleteIfExists temp-file-path)))))
+
+(deftest test-unsigned-int-byte-array-transform
+  (are [x] (= x (-> x
+                    sut/unsigned-int-to-bytes
+                    sut/unsigned-int-from-bytes))
+    1174416561
+    1191128241
+    2163471619
+    1862112303
+    1402846623))
