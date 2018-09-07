@@ -22,7 +22,7 @@
     `(let ~binding
        (try
          ~@body
-         #_(finally
+         (finally
            (delete-dir ~dir-symbol)
            (is (not (.exists (io/file ~dir-symbol)))))))))
 
@@ -199,15 +199,15 @@
         (bp/close-writer! bullog1))
 
       ;; append invalid data in the last file
-      #_(spit "target/bulbultest/bulbul.log.8" "shit" :append true)
+      (spit "target/bulbultest/bulbul.log.8" "shit" :append true)
 
       (let [bullog2 (s/segment-log default-codec {:directory dir
                                                   :max-entry 10})]
         (bp/open-writer! bullog2)
 
-        (is (= 9 (count (:writer-segs @(.-state bullog2)))))
-        #_(is (= 87 @(:last-index (last (:writer-segs @(.-state bullog2))))))
+        (is (= 8 (count (:writer-segs @(.-state bullog2)))))
+        (is (= 79 @(:last-index (last (:writer-segs @(.-state bullog2))))))
 
-        #_(bp/write! bullog2 [1 288])
+        (bp/write! bullog2 [1 288])
 
-        #_(is (= 88 @(:last-index (last (:writer-segs @(.-state bullog2))))))))))
+        (is (= 80 @(:last-index (last (:writer-segs @(.-state bullog2))))))))))

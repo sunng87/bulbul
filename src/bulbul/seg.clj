@@ -103,8 +103,8 @@
 (defn empty-tree []
   (cda/sorted-set-by #(< (:start-index %1) (:start-index %2))))
 
-(defn verify-segment-files [index-file-map]
-  (loop [segs index-file-map result (empty-tree) previous-last-index -1]
+(defn verify-segment-files [index-file-maps]
+  (loop [segs index-file-maps result (empty-tree) previous-last-index -1]
     (if-let [current-seg (first segs)]
       (if (= previous-last-index (dec (:start-index current-seg)))
         (let [[integrity last-index] (move-to-index! current-seg -1)]
@@ -113,10 +113,10 @@
                    (conj result current-seg)
                    last-index)
             (do
-              (close-and-remove-segs! (rest index-file-map))
+              (close-and-remove-segs! segs)
               result)))
         (do
-          (close-and-remove-segs! (rest index-file-map))
+          (close-and-remove-segs! segs)
           result))
       result)))
 
