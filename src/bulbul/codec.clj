@@ -258,7 +258,8 @@
                        crc-value (unsigned-int-from-bytes crc-bytes)
                        content-buffer (ByteBuffer/allocate byte-length)]
                    (when (= (.read fc content-buffer) byte-length)
-                     (when (= crc-value (crc32 (.flip content-buffer)))
+                     (println crc-value (crc32 (.flip content-buffer)))
+                     (when (= crc-value (crc32 content-buffer))
                        content-buffer))))]
     (if (some? result)
       result

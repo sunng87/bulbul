@@ -22,7 +22,7 @@
     `(let ~binding
        (try
          ~@body
-         (finally
+         #_(finally
            (delete-dir ~dir-symbol)
            (is (not (.exists (io/file ~dir-symbol)))))))))
 
@@ -182,3 +182,32 @@
 
         (bp/flush! bullog1)
         (is (= 9 (count (list-dir dir))))))))
+
+(deftest test-corrupted-files
+  (let [the-dir "target/bulbultest"]
+    (with-test-dir [dir the-dir]
+      ;; write 9 files
+      (let [bullog1 (s/segment-log default-codec {:directory dir
+                                                  :max-entry 10})]
+        (bp/open-writer! bullog1)
+
+        (bp/write-all! bullog1 (doall (map #(vector 1 %) (range 200 288))))
+
+        (bp/flush! bullog1)
+        (is (= 9 (count (list-dir dir))))
+
+        (bp/close-writer! bullog1))
+
+      ;; append invalid data in the last file
+      #_(spit "target/bulbultest/bulbul.log.8" "shit" :append true)
+
+      (let [bullog2 (s/segment-log default-codec {:directory dir
+                                                  :max-entry 10})]
+        (bp/open-writer! bullog2)
+
+        (is (= 9 (count (:writer-segs @(.-state bullog2)))))
+        #_(is (= 87 @(:last-index (last (:writer-segs @(.-state bullog2))))))
+
+        #_(bp/write! bullog2 [1 288])
+
+        #_(is (= 88 @(:last-index (last (:writer-segs @(.-state bullog2))))))))))
