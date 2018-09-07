@@ -224,7 +224,7 @@
     (.getValue v)))
 
 (defn unsigned-int-to-bytes [uint]
-  (.. (ByteBuffer/allocate 8)
+  (.. (ByteBuffer/allocate 4)
       (putInt (unchecked-int uint))
       (array)))
 
@@ -258,8 +258,7 @@
                        crc-value (unsigned-int-from-bytes crc-bytes)
                        content-buffer (ByteBuffer/allocate byte-length)]
                    (when (= (.read fc content-buffer) byte-length)
-                     (println crc-value (crc32 (.flip content-buffer)))
-                     (when (= crc-value (crc32 content-buffer))
+                     (when (= crc-value (crc32 (.flip content-buffer)))
                        content-buffer))))]
     (if (some? result)
       result
